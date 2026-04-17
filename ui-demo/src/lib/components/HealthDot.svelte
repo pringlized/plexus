@@ -1,8 +1,8 @@
 <script lang="ts">
-  import type { LayerHealth } from '$lib/sim/types';
+  import type { HealthStatus } from '$lib/types';
   import { healthDot } from '$lib/util';
 
-  let { health, pulse = true }: { health: LayerHealth; pulse?: boolean } = $props();
+  let { health, pulse = true }: { health: HealthStatus; pulse?: boolean } = $props();
 </script>
 
 <span class="relative inline-flex h-2.5 w-2.5 items-center justify-center">

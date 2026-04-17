@@ -1,7 +1,12 @@
 <script lang="ts">
   import { page } from '$app/stores';
   import { LayoutDashboard, Network, Radio, Cpu, Radar } from 'lucide-svelte';
-  import { nodes, receptors } from '$lib/sim/store.svelte';
+  import type { NodeConfig, ReceptorConfig } from '$lib/types';
+
+  let {
+    nodes,
+    receptors
+  }: { nodes: Record<string, NodeConfig>; receptors: Record<string, ReceptorConfig> } = $props();
 
   const primary = [
     { href: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -46,17 +51,18 @@
 
     <div class="mt-5 px-3 text-[10px] uppercase tracking-widest text-muted">Nodes</div>
     <ul class="mt-1 space-y-0.5">
-      {#each nodes as n}
-        {@const href = `/nodes/${n.id}`}
+      {#each Object.entries(nodes) as [shortId, node]}
+        {@const href = `/nodes/${shortId}`}
         {@const active = isActive(href, $page.url.pathname)}
         <li>
           <a
             {href}
             class="flex items-center gap-2 rounded-md px-3 py-1.5 text-[12.5px] transition
               {active ? 'bg-surface-2 text-text' : 'text-muted hover:bg-surface-2 hover:text-text'}"
+            title={node.description}
           >
             <Cpu size={13} class="opacity-70" />
-            <span class="truncate">{n.name}</span>
+            <span class="truncate">{shortId}</span>
           </a>
         </li>
       {/each}
@@ -64,17 +70,18 @@
 
     <div class="mt-5 px-3 text-[10px] uppercase tracking-widest text-muted">Receptors</div>
     <ul class="mt-1 space-y-0.5">
-      {#each receptors as r}
-        {@const href = `/receptors/${r.id}`}
+      {#each Object.entries(receptors) as [receptorId, receptor]}
+        {@const href = `/receptors/${receptorId}`}
         {@const active = isActive(href, $page.url.pathname)}
         <li>
           <a
             {href}
             class="flex items-center gap-2 rounded-md px-3 py-1.5 text-[12.5px] transition
               {active ? 'bg-surface-2 text-text' : 'text-muted hover:bg-surface-2 hover:text-text'}"
+            title={receptor.description}
           >
             <Radar size={13} class="opacity-70" />
-            <span class="truncate">{r.name}</span>
+            <span class="truncate">{receptorId}</span>
           </a>
         </li>
       {/each}

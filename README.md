@@ -140,10 +140,9 @@ correlates the stream across all of them. What looks like noise from a single
 node resolves into a clear pattern across the whole picture.
 
 ### Any System That Produces Events
-Plexus is not domain-specific and not stack-specific. If your component
-produces events, it can be a node. Drop Plexus in, define your node types,
-scatter your nodes, wire your receptors. The system starts watching
-immediately.
+Plexus is not domain-specific. If your component produces events, it can be a 
+node. Drop Plexus in, define your node types, scatter your nodes, wire your 
+receptors. The system starts watching immediately.
 
 ---
 

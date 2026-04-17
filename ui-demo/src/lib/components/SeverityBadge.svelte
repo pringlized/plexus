@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Severity } from '$lib/sim/types';
+  import type { Severity } from '$lib/types';
   import { severityClass } from '$lib/util';
 
   let {

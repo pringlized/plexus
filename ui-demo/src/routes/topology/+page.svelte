@@ -10,131 +10,110 @@
   import PlexusNodeCard from '$lib/components/topology/PlexusNodeCard.svelte';
   import ReceptorNodeCard from '$lib/components/topology/ReceptorNodeCard.svelte';
   import LayerGroup from '$lib/components/topology/LayerGroup.svelte';
-  import { nodes as plexusNodes, receptors as plexusReceptors, sim, receptorsFor, severityRank, nodeHealth } from '$lib/sim/store.svelte';
-  import { LAYERS } from '$lib/sim/fixtures';
-  import type { Severity } from '$lib/sim/types';
+  import type { NodeConfig, ReceptorConfig } from '$lib/types';
+  import { deriveLayers } from '$lib/config-helpers';
+
+  let { data } = $props();
 
   const nodeTypes = { plexus: PlexusNodeCard, receptor: ReceptorNodeCard, layer: LayerGroup };
 
-  const NODE_X = 260;
-  const NODE_COL_SPACING = 240;
-  const ROW_HEIGHT = 210;
-  const ROW_TOP = 60;
-  const NODE_Y_IN_ROW = 50;
-  const RECEPTOR_X = 900;
+  const LAYER_X = 40;
+  const LAYER_Y_BASE = 40;
+  const LAYER_SPACING = 200;
+  const LAYER_WIDTH = 640;
+  const LAYER_HEIGHT = 160;
 
-  // Layer band group nodes
-  const layerBands: Node[] = LAYERS.map((l, idx) => ({
-    id: `layer-${l.id}`,
-    type: 'layer',
-    position: { x: 40, y: ROW_TOP + idx * ROW_HEIGHT },
-    data: { label: l.name, layer: l.id },
-    style: `width: ${NODE_X + 2 * NODE_COL_SPACING}px; height: ${ROW_HEIGHT - 20}px;`,
-    selectable: false,
-    draggable: false,
-    zIndex: -1
-  }));
+  const RECEPTOR_X = 820;
+  const RECEPTOR_Y_BASE = 60;
+  const RECEPTOR_SPACING = 110;
 
-  // Plexus nodes — two per layer row
-  const nodeNodes: Node[] = plexusNodes.map((n) => {
-    const layerIdx = LAYERS.findIndex((l) => l.id === n.layer);
-    const inLayer = plexusNodes.filter((x) => x.layer === n.layer);
-    const col = inLayer.findIndex((x) => x.id === n.id);
-    return {
-      id: n.id,
-      type: 'plexus',
-      position: {
-        x: NODE_X + col * NODE_COL_SPACING,
-        y: ROW_TOP + layerIdx * ROW_HEIGHT + NODE_Y_IN_ROW
-      },
-      data: { node: n }
-    };
-  });
+  function buildFlowNodes(
+    nodes: Record<string, NodeConfig>,
+    receptors: Record<string, ReceptorConfig>
+  ): Node[] {
+    const layers = deriveLayers(nodes);
+    const out: Node[] = [];
 
-  // Receptor nodes stacked on the right
-  const receptorNodes: Node[] = plexusReceptors.map((r, i) => ({
-    id: r.id,
-    type: 'receptor',
-    position: { x: RECEPTOR_X, y: ROW_TOP + i * 110 + 20 },
-    data: { receptor: r }
-  }));
+    layers.forEach((layer, idx) => {
+      const y = LAYER_Y_BASE + idx * LAYER_SPACING;
 
-  // Static edges: each node → each matching receptor
-  const staticEdges: Edge[] = [];
-  for (const n of plexusNodes) {
-    for (const r of plexusReceptors) {
-      const listens = r.listensTo === '*' || r.listensTo.includes(n.id);
-      if (!listens) continue;
-      staticEdges.push({
-        id: `${n.id}->${r.id}`,
-        source: n.id,
-        target: r.id,
-        animated: false,
-        style: 'stroke: rgb(var(--border)); stroke-dasharray: 4 4;'
+      out.push({
+        id: `layer-${layer.name}`,
+        type: 'layer',
+        position: { x: LAYER_X, y },
+        data: { label: layer.name.charAt(0).toUpperCase() + layer.name.slice(1), layer: layer.name },
+        style: `width: ${LAYER_WIDTH}px; height: ${LAYER_HEIGHT}px;`,
+        selectable: false,
+        draggable: false,
+        zIndex: -1
       });
-    }
+
+      layer.nodes.forEach(({ shortId, config }, i) => {
+        const count = layer.nodes.length;
+        const slot = count === 1 ? LAYER_WIDTH / 2 - 100 : 60 + i * (LAYER_WIDTH - 280);
+        out.push({
+          id: shortId,
+          type: 'plexus',
+          parentId: `layer-${layer.name}`,
+          extent: 'parent',
+          position: { x: slot, y: 50 },
+          data: { shortId, node: config, health: 'healthy', pulsing: false }
+        });
+      });
+    });
+
+    Object.entries(receptors).forEach(([receptorId, receptor], i) => {
+      out.push({
+        id: receptorId,
+        type: 'receptor',
+        position: { x: RECEPTOR_X, y: RECEPTOR_Y_BASE + i * RECEPTOR_SPACING },
+        data: { receptorId, receptor, pulsing: false }
+      });
+    });
+
+    return out;
   }
 
-  let nodes: Node[] = $state([...layerBands, ...nodeNodes, ...receptorNodes]);
-  let edges: Edge[] = $state(staticEdges);
-
-  // Live edge animation: react to recent signals and toggle edge style for ~1.2s.
-  const sevColor: Record<Severity, string> = {
-    info: 'var(--sev-info)',
-    notice: 'var(--sev-notice)',
-    warning: 'var(--sev-warning)',
-    anomaly: 'var(--sev-anomaly)',
-    critical: 'var(--sev-critical)'
-  };
-
-  $effect(() => {
-    const cutoff = sim.now - 1500;
-    const activeSignals = sim.signals.filter((s) => s.timestamp >= cutoff);
-    // Determine which edges are currently "lit".
-    const litEdges = new Map<string, Severity>();
-    for (const s of activeSignals) {
-      for (const r of receptorsFor(s)) {
-        const id = `${s.node_id}->${r.id}`;
-        const prev = litEdges.get(id);
-        if (!prev || severityRank(s.severity) > severityRank(prev)) {
-          litEdges.set(id, s.severity);
-        }
+  function buildFlowEdges(receptors: Record<string, ReceptorConfig>): Edge[] {
+    const edges: Edge[] = [];
+    for (const [receptorId, receptor] of Object.entries(receptors)) {
+      for (const nodeId of receptor.listens_to) {
+        edges.push({
+          id: `${nodeId}->${receptorId}`,
+          source: nodeId,
+          target: receptorId,
+          animated: false,
+          style: 'stroke: rgb(var(--border)); stroke-dasharray: 4 4;'
+        });
       }
     }
-    edges = staticEdges.map((e) => {
-      const sev = litEdges.get(e.id);
-      if (sev) {
-        return {
-          ...e,
-          animated: true,
-          style: `stroke: rgb(${sevColor[sev]}); stroke-width: 2; filter: drop-shadow(0 0 4px rgb(${sevColor[sev]} / 0.6));`
-        };
-      }
-      return { ...e, animated: false, style: 'stroke: rgb(var(--border)); stroke-dasharray: 4 4;' };
-    });
-  });
+    return edges;
+  }
 
-  // Selected node/receptor for detail drawer.
+  let nodes: Node[] = $state(buildFlowNodes(data.nodes, data.receptors));
+  let edges: Edge[] = $state(buildFlowEdges(data.receptors));
+
   let selection: { kind: 'node' | 'receptor'; id: string } | null = $state(null);
+
   function onNodeClick({ node: n }: { node: Node }) {
     if (n.type === 'plexus') selection = { kind: 'node', id: n.id };
     else if (n.type === 'receptor') selection = { kind: 'receptor', id: n.id };
     else selection = null;
   }
 
-  const selected = $derived(() => {
+  const selected = $derived.by(() => {
     if (!selection) return null;
     if (selection.kind === 'node') {
-      const n = plexusNodes.find((x) => x.id === selection.id);
-      if (!n) return null;
-      const wired = plexusReceptors.filter((r) => r.listensTo === '*' || r.listensTo.includes(n.id));
-      const last = sim.signals.find((s) => s.node_id === n.id);
-      return { kind: 'node' as const, node: n, wired, last };
+      const node = data.nodes[selection.id];
+      if (!node) return null;
+      const wired = Object.entries(data.receptors)
+        .filter(([, r]) => r.listens_to.includes(selection!.id))
+        .map(([id, r]) => ({ id, ...r }));
+      return { kind: 'node' as const, shortId: selection.id, node, wired };
     }
-    const r = plexusReceptors.find((x) => x.id === selection!.id);
-    if (!r) return null;
-    const last = sim.receipts.find((rc) => rc.receptor_id === r.id);
-    return { kind: 'receptor' as const, receptor: r, last };
+    const receptor = data.receptors[selection.id];
+    if (!receptor) return null;
+    return { kind: 'receptor' as const, receptorId: selection.id, receptor };
   });
 </script>
 
@@ -142,7 +121,7 @@
   <header class="flex items-center justify-between border-b border-border bg-surface px-6 py-3">
     <div>
       <h1 class="text-lg font-semibold tracking-wide">Topology</h1>
-      <p class="text-xs text-muted">Nodes (left) wired to receptors (right). Edges light up as signals flow.</p>
+      <p class="text-xs text-muted">Nodes grouped by layer, wired to receptors via <code class="mono">listens_to</code>. Edges will light up when signals flow.</p>
     </div>
   </header>
 
@@ -164,10 +143,6 @@
         nodeColor={(n) => {
           if (n.type === 'layer') return 'rgb(var(--surface-2))';
           if (n.type === 'receptor') return 'rgb(var(--accent))';
-          const h = nodeHealth(n.id);
-          if (h === 'critical') return 'rgb(var(--sev-critical))';
-          if (h === 'anomaly') return 'rgb(var(--sev-anomaly))';
-          if (h === 'warning') return 'rgb(var(--sev-warning))';
           return 'rgb(var(--sev-healthy))';
         }}
         nodeStrokeColor={(n) => (n.type === 'layer' ? 'rgb(var(--border))' : 'rgb(var(--bg))')}
@@ -177,32 +152,35 @@
     </SvelteFlow>
   </div>
 
-  {#if selected()}
-    {@const s = selected()!}
+  {#if selected}
+    {@const s = selected}
     <aside class="border-t border-border bg-surface px-6 py-3 text-sm">
       {#if s.kind === 'node'}
         <div class="flex flex-wrap items-center gap-3">
-          <span class="font-semibold">{s.node.name}</span>
-          <span class="mono text-xs text-muted">{s.node.id}</span>
+          <span class="font-semibold">{s.shortId}</span>
+          <span class="mono text-xs text-muted">{s.node.uuid}</span>
           <span class="chip bg-surface-2 text-muted">{s.node.type}</span>
           <span class="chip bg-surface-2 text-muted">{s.node.layer} layer</span>
-          <a href={`/nodes/${s.node.id}`} class="ml-auto text-xs text-accent hover:underline">Open node detail →</a>
+          <a href={`/nodes/${s.shortId}`} class="ml-auto text-xs text-accent hover:underline">Open node detail →</a>
         </div>
         <div class="mt-1 text-xs text-muted">{s.node.description}</div>
-        <div class="mt-2 text-xs text-muted">
-          Wired to:
-          {#each s.wired as r, i}
-            <a href={`/receptors/${r.id}`} class="ml-1 underline-offset-2 hover:underline">{r.name}</a>{i < s.wired.length - 1 ? ',' : ''}
-          {/each}
-        </div>
+        {#if s.wired.length > 0}
+          <div class="mt-2 text-xs text-muted">
+            Wired to:
+            {#each s.wired as r, i}
+              <a href={`/receptors/${r.id}`} class="ml-1 underline-offset-2 hover:underline">{r.id}</a>{i < s.wired.length - 1 ? ',' : ''}
+            {/each}
+          </div>
+        {/if}
       {:else}
         <div class="flex flex-wrap items-center gap-3">
-          <span class="font-semibold">{s.receptor.name}</span>
-          <span class="mono text-xs text-muted">{s.receptor.id}</span>
+          <span class="font-semibold">{s.receptorId}</span>
+          <span class="mono text-xs text-muted">{s.receptor.uuid}</span>
           <span class="chip bg-surface-2 text-muted">{s.receptor.type}</span>
-          <a href={`/receptors/${s.receptor.id}`} class="ml-auto text-xs text-accent hover:underline">Open receptor detail →</a>
+          <a href={`/receptors/${s.receptorId}`} class="ml-auto text-xs text-accent hover:underline">Open receptor detail →</a>
         </div>
         <div class="mt-1 text-xs text-muted">{s.receptor.description}</div>
+        <div class="mt-2 text-xs text-muted">Listens to: {s.receptor.listens_to.join(', ')}</div>
       {/if}
     </aside>
   {/if}

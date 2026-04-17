@@ -1,4 +1,4 @@
-import type { LayerHealth, Severity } from './sim/types';
+import type { HealthStatus, Severity } from './types';
 
 export function relativeTime(ts: number, now: number): string {
   const diff = Math.max(0, now - ts);
@@ -21,7 +21,7 @@ export function severityClass(s: Severity): string {
   }[s];
 }
 
-export function severityRing(s: Severity | LayerHealth): string {
+export function severityRing(s: Severity | HealthStatus): string {
   return {
     healthy: 'ring-sev-healthy/50',
     info: 'ring-sev-info/40',
@@ -32,7 +32,7 @@ export function severityRing(s: Severity | LayerHealth): string {
   }[s as 'healthy'];
 }
 
-export function healthDot(h: LayerHealth): string {
+export function healthDot(h: HealthStatus): string {
   return {
     healthy: 'bg-sev-healthy',
     warning: 'bg-sev-warning',
@@ -41,6 +41,10 @@ export function healthDot(h: LayerHealth): string {
   }[h];
 }
 
-export function healthLabel(h: LayerHealth): string {
+export function healthLabel(h: HealthStatus): string {
   return h.toUpperCase();
+}
+
+export function severityRank(s: Severity): number {
+  return { info: 0, notice: 1, warning: 2, anomaly: 3, critical: 4 }[s];
 }

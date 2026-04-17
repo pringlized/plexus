@@ -1,14 +1,28 @@
 <script lang="ts">
   import SeverityBadge from './SeverityBadge.svelte';
-  import { sim, nodes } from '$lib/sim/store.svelte';
   import { relativeTime } from '$lib/util';
-  import type { Signal } from '$lib/sim/types';
+  import type { Severity } from '$lib/types';
   import { ChevronRight } from 'lucide-svelte';
 
-  let { signal, compact = false }: { signal: Signal; compact?: boolean } = $props();
+  // Idle until signals start flowing. Props mirror the future signal shape
+  // so the next spec can drop real data in unchanged.
+  export interface DisplaySignal {
+    signal_id: string;
+    node_short_id: string;
+    nodeName?: string;
+    severity: Severity;
+    category: string;
+    timestamp: number;
+    payload: Record<string, unknown>;
+  }
+
+  let {
+    signal,
+    now = Date.now(),
+    compact = false
+  }: { signal: DisplaySignal; now?: number; compact?: boolean } = $props();
 
   let expanded = $state(false);
-  const node = $derived(nodes.find((n) => n.id === signal.node_id));
 </script>
 
 <div
@@ -17,13 +31,13 @@
 >
   <div class="flex items-center gap-2">
     <SeverityBadge severity={signal.severity} pulse={signal.severity !== 'info' && signal.severity !== 'notice'} />
-    <span class="text-xs text-muted">{relativeTime(signal.timestamp, sim.now)}</span>
+    <span class="text-xs text-muted">{relativeTime(signal.timestamp, now)}</span>
     <a
-      href={`/nodes/${signal.node_id}`}
+      href={`/nodes/${signal.node_short_id}`}
       class="truncate font-medium hover:text-accent"
       onclick={(e) => e.stopPropagation()}
     >
-      {node?.name ?? signal.node_id}
+      {signal.nodeName ?? signal.node_short_id}
     </a>
     <span class="mono truncate text-muted">{signal.category}</span>
     {#if !compact}

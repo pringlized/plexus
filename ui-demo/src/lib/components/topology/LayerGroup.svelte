@@ -1,12 +1,10 @@
 <script lang="ts">
   import type { NodeProps } from '@xyflow/svelte';
-  import { sim, layerHealth } from '$lib/sim/store.svelte';
-  import type { LayerId } from '$lib/sim/types';
+  import type { HealthStatus } from '$lib/types';
   import { healthDot } from '$lib/util';
 
-  let props: NodeProps<{ label: string; layer: LayerId }> = $props();
-  const layer = $derived(props.data.layer);
-  const health = $derived(layerHealth(layer));
+  let props: NodeProps<{ label: string; layer: string; health?: HealthStatus }> = $props();
+  const health = $derived<HealthStatus>(props.data.health ?? 'healthy');
 </script>
 
 <div
