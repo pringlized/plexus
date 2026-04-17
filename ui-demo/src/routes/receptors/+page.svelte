@@ -1,5 +1,7 @@
 <script lang="ts">
   import { Radar } from 'lucide-svelte';
+  import { signalsByReceptor, now } from '$lib/stores/signals';
+  import { relativeTime } from '$lib/util';
 
   let { data } = $props();
 </script>
@@ -11,6 +13,7 @@
   </header>
   <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
     {#each Object.entries(data.receptors) as [receptorId, receptor]}
+      {@const last = ($signalsByReceptor[receptorId] ?? [])[0]}
       <a href={`/receptors/${receptorId}`} class="card flex flex-col gap-2 px-4 py-3 text-sm transition hover:border-accent/60">
         <div class="flex items-center gap-2">
           <Radar size={14} class="text-accent" />
@@ -25,6 +28,11 @@
             · Fires on: {receptor.config.severity_filter.join(', ')}
           {/if}
         </div>
+        {#if last}
+          <div class="mono text-[11px] text-muted">
+            Last: {last.signal.severity} · {relativeTime(new Date(last.signal.timestamp).getTime(), $now)}
+          </div>
+        {/if}
       </a>
     {/each}
   </div>

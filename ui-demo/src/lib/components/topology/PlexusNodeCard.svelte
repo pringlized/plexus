@@ -1,20 +1,21 @@
 <script lang="ts">
   import { Handle, Position, type NodeProps } from '@xyflow/svelte';
   import { healthDot } from '$lib/util';
-  import type { NodeConfig, HealthStatus } from '$lib/types';
+  import type { NodeConfig } from '$lib/types';
   import { Cpu } from 'lucide-svelte';
+  import { nodeHealth, signalsByNode, now } from '$lib/stores/signals';
 
-  let props: NodeProps<{
-    shortId: string;
-    node: NodeConfig;
-    health?: HealthStatus;
-    pulsing?: boolean;
-  }> = $props();
+  let props: NodeProps<{ shortId: string; node: NodeConfig }> = $props();
 
   const shortId = $derived(props.data.shortId);
   const node = $derived(props.data.node);
-  const health = $derived<HealthStatus>(props.data.health ?? 'healthy');
-  const pulsing = $derived(props.data.pulsing ?? false);
+
+  const health = $derived($nodeHealth[shortId] ?? 'healthy');
+  const recent = $derived(($signalsByNode[shortId] ?? [])[0]);
+  const recentAge = $derived(
+    recent ? $now - new Date(recent.signal.timestamp).getTime() : Infinity
+  );
+  const pulsing = $derived(recentAge < 1200);
   const critical = $derived(health === 'critical');
 </script>
 

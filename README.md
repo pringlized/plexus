@@ -1,14 +1,13 @@
 <p align="center">
-  <img src="assets/plexus_readme_header.png" alt="Plexus — The Universal Signal Nervous System" />
+  <img src="assets/plexus_readme_header_v2.png" alt="Plexus — The Universal Signal Nervous System" />
 </p>
 
 > *Decentralize the sensing. Centralize the picture.*
 
-Plexus is an open-source operational intelligence layer for complex systems. It
-collects signals from distributed nodes, conducts them through a central stream,
-and delivers them to receptors that respond in real time. It has no opinions
-about what signals mean. The intelligence lives in the receptors you build on
-top of it.
+Plexus is an open-source signal nervous system for complex software. Drop a
+single function call anywhere in your codebase — a **pinch** — and that
+moment becomes a named, typed, traceable signal that flows through a central
+hub to any number of receptors that know what to do with it.
 
 Plexus is the wire. The wire does not decide what travels through it.
 
@@ -23,83 +22,204 @@ Problems compound silently until they surface as incidents.
 The traditional answer is monitoring dashboards — pull data periodically,
 display it, hope someone is looking when something goes wrong.
 
-**Plexus inverts this.** Every node is a live tap on a signal-producing
-component. Everything it sees it reports immediately to The Plexus. Receptors
-respond in real time. The system does not wait to be checked.
+**Plexus inverts this.** Every pinch is a live tap on a meaningful moment in
+your code. The signal fires immediately. Receptors respond in real time. The
+system does not wait to be checked.
+
+---
+
+## How It Works
+
+### One function call. That's the entire integration cost.
+
+```python
+from plexus import PlexusHub, Severity
+
+hub = PlexusHub(
+    nodes_path="plexus-nodes.yaml",
+    receptors_path="plexus-receptors.yaml",
+)
+
+hub.pinch("sec-gate-01", {
+    "doc_id": "doc-881",
+    "threat": "homoglyph",
+    "char": "U+0430",
+    "word": "anthropic",
+    "scan_ms": 0.4,
+}, severity=Severity.CRITICAL, category="scan.critical")
+```
+
+That's it. The developer drops a pinch at a meaningful point in their code
+and walks away. Plexus handles everything else:
+
+- Looks up the node definition from config
+- Captures the exact **file, line, and function** where the pinch fired
+- Validates the signal envelope
+- Routes to every wired receptor
+- Each receptor evaluates and acts — or discards to `/dev/null`
+- Fires and forgets
+
+The pinch never blocks. The pinch never waits. The pinch never cares what
+happens downstream.
 
 ---
 
 ## Core Concepts
 
-### Nodes
-A **Node** is any component that emits signals. Each node has a UUID, a type,
-and a defined signal schema. Nodes do not know who is listening. They only
-know how to emit.
+### The Pinch
+A pinch is a single call to `hub.pinch()`. It marks a moment in your code
+as signal-worthy. Two required arguments — a node ID and a payload dict.
+Severity and category are optional.
 
-Plexus ships with first-class node types for common use cases:
+The payload is an unlimited key/value dict. Pass whatever is meaningful at
+that point in the code. Strings, numbers, bools, nested dicts, lists — any
+JSON-serializable value. No schema registration. No fixed fields. No
+migrations when you add new keys.
+
+Every pinch automatically captures its **call site** — the source file, line
+number, and function name where `hub.pinch()` was called. This is captured
+via Python's `inspect` module and carried on every signal. No extra work from
+the caller.
+
+When a downstream agent receives a flagged signal it has everything it needs:
+- **What** — node description from config
+- **Where** — exact file and line in the codebase
+- **What happened** — the full payload
+- **How bad** — severity
+- **Who flagged it** — which receptor and why
+
+The agent doesn't investigate. It executes.
+
+### Nodes
+A **Node** is a named pinch point. It exists as four lines in
+`plexus-nodes.yaml`. That's all it is.
+
+```yaml
+nodes:
+  sec-gate-01:
+    uuid: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+    type: security
+    layer: security
+    description: "Security gate on knowledge base ingestion pipeline"
+```
+
+The node ID (`sec-gate-01`) is what you pass to `hub.pinch()`. The
+description is the human label. The layer is how the UI groups nodes
+visually. The type is what receptors filter on.
+
+Nodes are purely conceptual. There is no registration process. There is no
+boot sequence. There is no node object in code. A node is just a name in a
+config file that gives a pinch point an identity.
+
+**First-class node types:**
 
 | Type | Description |
 |---|---|
 | `security` | Character-level and pattern-based threat detection |
-| `ingestion` | Knowledge base ingestion pipeline events, document processing, embedding operations |
+| `ingestion` | Knowledge base ingestion pipeline events, document processing |
 | `build` | Build chain execution, dependency state, artifact generation |
 | `agent` | Agent task lifecycle, tool call patterns, context utilization |
 | `health` | Process heartbeat, resource utilization, connectivity state |
 | `pipeline` | Workflow state transitions, stage durations, stall detection |
 
-Custom node types are supported. Define any type identifier and any payload
-schema. Plexus conducts it faithfully without knowing what it means.
+Custom types are supported — any string. Plexus carries it faithfully.
 
 ### Signals
-A **Signal** is the atomic unit of information in Plexus. Every signal carries:
+A **Signal** is the envelope Plexus builds around every pinch. The caller
+provides the payload. Plexus builds everything else automatically.
 
-- `signal_id` — UUID, globally unique
-- `node_id` — UUID of the emitting node
-- `node_type` — type identifier of the emitting node
-- `timestamp` — ISO 8601, set by the node at emission time
-- `severity` — `info` | `notice` | `warning` | `anomaly` | `critical`
-- `category` — node-defined classification string
-- `payload` — structured data, node-defined schema
-- `system_layer` — logical layer this node belongs to
-- `sequence` — monotonically increasing integer per node
+| Field | Source | Description |
+|---|---|---|
+| `signal_id` | auto | UUID, globally unique |
+| `node_short_id` | caller | the node ID passed to pinch() |
+| `node_uuid` | config | stable UUID from plexus-nodes.yaml |
+| `node_type` | config | type string from config |
+| `node_layer` | config | layer from config |
+| `node_description` | config | human description from config |
+| `severity` | caller | info / notice / warning / anomaly / critical |
+| `category` | caller | caller-defined classification string |
+| `payload` | caller | unlimited k/v dict |
+| `sequence` | auto | monotonically increasing per node |
+| `timestamp` | auto | UTC at time of pinch |
+| `source_file` | auto | file where hub.pinch() was called |
+| `source_line` | auto | line number where hub.pinch() was called |
+| `source_function` | auto | function name where hub.pinch() was called |
 
-### The Plexus (Central Hub)
-The Plexus is the central signal conductor. It maintains a registry of all
-known nodes, accepts incoming signals, maintains a live signal stream, routes
-signals to wired receptors, and tracks node liveness.
+### The Hub
+`PlexusHub` is the central router. It loads config on init, builds a routing
+table from `listens_to` mappings, and exposes one public method: `pinch()`.
 
-The Plexus does not evaluate signals. It does not decide which signals matter.
-It routes what arrives to whoever asked to receive it.
+The hub has no opinions. It does not evaluate signals. It does not decide
+what matters. It routes what arrives to whoever asked to receive it.
 
 ### Receptors
-A **Receptor** is a processing module that subscribes to signals from one or
-more nodes and responds to them. Receptors have opinions. Plexus does not.
+A **Receptor** is where the intelligence lives. A Python class with a single
+`receive(signal)` method that returns one of three decisions:
 
-A receptor defines what node types it listens to, which severity levels it
-cares about, and what it does when a signal arrives. A receptor can do
-anything: log, alert, invoke an agent, call an API, write to a database,
-chain to another receptor.
+- `discard` — signal goes to `/dev/null`. Nothing written. Signal never existed.
+- `flag` — signal is flagged with a human-readable reason.
+- `flag+action` — flagged and an action is queued (rev2).
 
-Plexus ships with first-class receptors for common use cases:
+Receptors are defined in `plexus-receptors.yaml` and mapped to nodes via
+`listens_to`. A receptor can listen to one node or fifty. A node can feed
+one receptor or ten. The wiring is pure config.
+
+```yaml
+receptors:
+  security-alerter:
+    uuid: "r1a2b3c4-..."
+    type: alerter
+    description: "Flags and alerts on security anomalies and criticals"
+    listens_to:
+      - sec-gate-01
+      - sec-auth-01
+    config:
+      severity_filter:
+        - warning
+        - anomaly
+        - critical
+      alert_label: "SECURITY ALERT"
+```
+
+**First-class receptor types:**
 
 | Type | Description |
 |---|---|
-| `logger` | Structured log output, configurable format |
-| `alerter` | Notification dispatch (webhook, messaging, email) |
-| `health-aggregator` | Rolls up node signals into system-layer health status |
-| `agent-invoker` | Dispatches a focused agent when signal conditions are met |
-| `threshold-watcher` | Fires when a signal metric crosses a defined boundary |
+| `alerter` | Flags signals matching severity filter |
+| `health_aggregator` | Rolls up node signals into layer health status |
+| `logger` | Structured debug logging, all signals |
+| `agent-invoker` | Dispatches a focused agent on match (rev2) |
+| `threshold-watcher` | Fires when a metric crosses a boundary (rev2) |
+
+**Building a custom receptor** — describe what you want to an LLM, point it
+at `plexus/receptors/base.py`, and iterate. One method. No other knowledge
+of Plexus internals required.
 
 ### System Layers
-**System layers** are logical groupings of nodes that belong together
-conceptually. They exist for human comprehension — to prevent a large node
-deployment from becoming visual chaos. Each layer derives a health status from
-the aggregate state of its nodes:
+Layers are conceptual groupings of nodes. They exist as a string in the node
+config — nothing more. Type a new layer name, refresh, and it appears in the
+topology, the dashboard health cards, and the nav. No registration. No
+migration. No restart.
 
-- **Healthy** — all nodes emitting normally, no active anomalies
-- **Degraded** — warning-level signals active
-- **Anomaly** — anomaly-level signals active
-- **Critical** — critical signals active or nodes gone silent
+---
+
+## Configuration
+
+Everything lives in two files. These files are the source of truth for the
+entire system — the UI, the routing table, the topology canvas, the nav,
+every detail page.
+
+**`plexus-nodes.yaml`** — node definitions. Four fields per node.
+
+**`plexus-receptors.yaml`** — receptor definitions and wiring.
+
+Adding a new node: four lines of YAML. Refresh. It appears in the nav,
+the topology, and as a working detail page. Zero code changes.
+
+Adding a new layer: type a new string in the `layer` field. Refresh. Done.
+
+Topology changes are git commits. Every wiring change is diffable,
+reviewable, and reversible. `git revert` is your rollback.
 
 ---
 
@@ -110,136 +230,130 @@ Wire a character-level scanner (such as
 [glassglyph-scanner](https://github.com/pringlized/glassglyph-scanner)) as a
 `security` node on your knowledge base ingestion pipeline. Every document
 scanned emits a signal. Clean documents emit `info`. Suspicious content emits
-`warning` through `critical`. A `security-alerter` receptor notifies your team
-immediately. An `agent-invoker` receptor dispatches a specialist agent to
-quarantine and investigate on critical findings.
+`warning` through `critical`. A `security-alerter` receptor flags it
+immediately with the exact file and line where the gate fired.
 
-You are no longer auditing logs after the fact. You are watching the gate fire
-in real time.
+You are no longer auditing logs after the fact. You are watching the gate
+fire in real time.
 
 ### Agentic Workflow Observability
 In multi-agent systems, individual agents operate in isolation. Plexus gives
-you a unified view across all of them. Each agent registers as a node and emits
-signals on task pickup, tool calls, completion, and anomalous behavior. A
-`health-aggregator` receptor maintains a live health picture. A
-`threshold-watcher` receptor fires when an agent goes idle beyond a defined
-threshold. You see the whole workforce at a glance.
+you a unified view across all of them. Each agent drops pinches on task
+pickup, tool calls, completion, and anomalous behavior. The source file:line
+on every signal tells you not just that an agent acted but exactly which line
+of code triggered it.
 
 ### Build Pipeline Intelligence
-Wire your build system as a `build` node. Emit signals on dependency
-resolution, stage transitions, artifact generation, and failures. Plexus
-accumulates the signal history. Stalls become visible before they become
-incidents. Patterns emerge across builds. The `agent-invoker` receptor can
-dispatch a diagnostic agent the moment anomalous build behavior is detected.
-
-### Security Posture Monitoring
-Scatter `security` nodes across your API surface, authentication layer, and
-data ingestion points. Each fires signals on anomalous patterns — unusual
-access, authentication failures, rate limit hits, encoding attacks. Plexus
-correlates the stream across all of them. What looks like noise from a single
-node resolves into a clear pattern across the whole picture.
+Wire your build system as a `build` node. Pinch on dependency resolution,
+stage transitions, artifact generation, and failures. When a stage fails the
+flagged signal carries the exact file and function that fired — the starting
+point for any automated investigation.
 
 ### Any System That Produces Events
-Plexus is not domain-specific. If your component produces events, it can be a 
-node. Drop Plexus in, define your node types, scatter your nodes, wire your 
-receptors. The system starts watching immediately.
+If your component has a moment worth watching, drop a pinch. The config gives
+it a name. The receptor gives it meaning.
 
 ---
 
 ## The Visual System
 
-Plexus ships two visual tools as first-class features.
+Plexus ships a SvelteKit UI driven entirely by the YAML config. The nav,
+topology, and all detail pages build themselves from the config files. No
+hardcoded UI. No admin panel. No database-backed node management.
 
-### Topology Editor
-A canvas-based visual editor for defining and managing the entire Plexus
-configuration. Nodes sit on the canvas grouped into layer regions. Receptors
-appear in a sidebar panel. Connections are drawn by the user — lines from a
-node to one or more receptors. A connection is a live subscription. Draw the
-line, the subscription is active. Remove it, the subscription ends.
+### Topology
+A Svelte Flow canvas showing nodes grouped into layer regions, wired to
+receptors. Edges animate with severity-appropriate color when signals flow.
 
-The topology configuration is JSON. The canvas is the editor for that JSON.
-An LLM can generate or modify topology JSON directly — the user opens the
-canvas to view and tweak the result visually.
+### Dashboard
+Layer health cards, live signal feed, stats. All derived from the live
+signal stream.
 
 ### Live Signal Monitor
-A real-time three-column view of Plexus in operation:
+Three-column real-time view: node broadcasts → receptor receipts → receptor
+actions. Every signal row shows `filename.py:line` from the call site.
 
-- **Node Broadcasts** — every signal emitted by every node, live
-- **Receptor Receipts** — every signal received by every receptor, live
-- **Receptor Actions** — every action taken by every receptor in response
-
-Filterable by layer, node, and severity. The whole nervous system visible
-in one view.
-
----
-
-## Tech Stack
-
-**Backend**
-- Rust / Axum
-- SQLx / Postgres
-- WebSockets (Tokio) — live signal stream delivery
-- MCP (rmcp) — receptor invocation and agent dispatch
-
-**Frontend**
-- SvelteKit
-- Svelte Flow — topology canvas
-- Tailwind CSS
-- shadcn-svelte
-- Lucide icons
-
----
-
-## Running the Demo
-
-The `ui-demo/` directory contains a fully functional SvelteKit demo with
-simulated live signals. No backend required — all data is generated in the
-frontend to demonstrate the full system behavior including the critical event
-cascade.
-
-```bash
-cd ui-demo
-npm run dev
-```
-
-The demo runs on `http://localhost:5173` by default.
-
-The demo simulates a live six-node system across three layers (Security,
-Ingestion, Build) with four receptors. Every ~90 seconds the glassglyph-scanner
-node fires a critical signal and the full immune system response cascade plays
-out across all pages simultaneously — security layer goes red, agent-invoker
-dispatches a specialist, system resolves back to healthy.
+### Node & Receptor Detail Pages
+Dynamic routes driven by config. Every node and receptor in the YAML has
+a working detail page automatically.
 
 <p align="center">
-  <img src="assets/plexus-dashboard.png" alt="Plexus Dashboard — system health, stats, and live signal feed" />
+  <img src="assets/plexus-dashboard.png" alt="Plexus Dashboard" />
   <br/>
   <em>Dashboard — layer health, live signal feed, and at-a-glance stats.</em>
 </p>
 
 <p align="center">
-  <img src="assets/plexus-topology.png" alt="Plexus Topology — Svelte Flow canvas showing nodes wired to receptors" />
+  <img src="assets/plexus-topology.png" alt="Plexus Topology" />
   <br/>
-  <em>Topology — nodes grouped by layer, wired to receptors; edges light up as signals flow.</em>
+  <em>Topology — nodes grouped by layer, wired to receptors. Edges light up as signals flow.</em>
 </p>
 
-Pages included in the demo:
+---
 
-| Page | Route | Description |
-|---|---|---|
-| Dashboard | `/` | System health at a glance, live signal feed |
-| Topology | `/topology` | Svelte Flow canvas with animated signal edges |
-| Monitor | `/monitor` | Three-column live signal monitor |
-| Node Detail | `/nodes/:id` | Per-node signal history and health |
-| Receptor Detail | `/receptors/:id` | Per-receptor invocation history and configuration |
+## Running It
+
+```bash
+# Clone the repo
+git clone https://github.com/pringlized/plexus.git
+cd plexus
+
+# Install the Python library
+pip install -e .
+
+# Terminal 1 — start the UI
+cd ui-demo
+npm install
+npm run dev
+
+# Terminal 2 — run the harness
+cd ..
+python harness/runner.py
+```
+
+The harness fires pinches across five fake system components — security
+scanner, ingestion pipeline, build engine, agent worker, health monitor.
+The UI receives them live and renders in real time.
+
+Watch the topology edges light up. Watch the security layer flip to anomaly.
+Watch every signal row show `fake_system.py:47`.
+
+---
+
+## Tech Stack
+
+**Python Library**
+- Python 3.11+
+- Pydantic v2 — all models and config validation
+- PyYAML — config loading
+- httpx — fire-and-forget POST to UI
+
+**UI**
+- SvelteKit + Svelte 5
+- Svelte Flow — topology canvas
+- Tailwind CSS
+- Lucide icons
 
 ---
 
 ## Project Status
 
-Plexus is in active R&D. The demo UI represents the target UX. The Rust backend
-and WebSocket signal infrastructure are in planning. The node registration
-model and topology JSON schema are the next foundational decisions before
-implementation begins.
+Plexus rev1 is running.
+
+**Rev1 — complete**
+- `PlexusHub` with routing table and receptor evaluation
+- YAML-driven config — nodes and receptors in two files
+- `hub.pinch()` with automatic call site capture (file:line:function)
+- Unlimited k/v payload dict
+- Alerter, health-aggregator, and logger receptor types
+- SvelteKit UI driven entirely by YAML config
+- Live signal flow: pinch → hub → HTTP POST → SSE → browser store → UI
+
+**Rev2 — next**
+- Flagged signal persistence (SQLAlchemy + Postgres)
+- Receptor actions (agent-invoker, threshold-watcher)
+- Topology canvas editing — draw lines, rewrites YAML atomically
+- WebSocket signal stream
 
 Contributions, feedback, and discussion welcome.
 
@@ -247,14 +361,16 @@ Contributions, feedback, and discussion welcome.
 
 ## Philosophy
 
-Most observability platforms try to be smart. They correlate for you, they
-decide what "critical" means, they ship opinions. You inherit their
-assumptions, and anything that doesn't fit the platform's mental model drops
-out of view.
+Most observability platforms try to be smart. They correlate for you, decide
+what critical means, ship opinions about what your system should look like.
+You inherit their assumptions, and anything that doesn't fit drops out of view.
 
-Plexus stays deliberately dumb. The wire carries signals faithfully. What
-they mean, which ones matter, and what to do about them — those decisions
-live in the receptors you write, where the context is.
+Plexus stays deliberately simple. Four primitives — nodes, signals, the hub,
+receptors. The hub has no opinions. The config owns the structure. The
+receptors own the logic. The pinch owns nothing except the moment it marks.
+
+Two YAML files. An LLM can write them in two minutes. Git tracks every change.
+The topology is always honest because it has nowhere to hide.
 
 The restraint is the point.
 

@@ -2,16 +2,18 @@
   import { Handle, Position, type NodeProps } from '@xyflow/svelte';
   import type { ReceptorConfig } from '$lib/types';
   import { Radar } from 'lucide-svelte';
+  import { signalsByReceptor, now } from '$lib/stores/signals';
 
-  let props: NodeProps<{
-    receptorId: string;
-    receptor: ReceptorConfig;
-    pulsing?: boolean;
-  }> = $props();
+  let props: NodeProps<{ receptorId: string; receptor: ReceptorConfig }> = $props();
 
   const receptorId = $derived(props.data.receptorId);
   const receptor = $derived(props.data.receptor);
-  const pulsing = $derived(props.data.pulsing ?? false);
+
+  const recent = $derived(($signalsByReceptor[receptorId] ?? [])[0]);
+  const recentAge = $derived(
+    recent ? $now - new Date(recent.signal.timestamp).getTime() : Infinity
+  );
+  const pulsing = $derived(recentAge < 1200);
 </script>
 
 <div

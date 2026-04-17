@@ -10,8 +10,10 @@
   import PlexusNodeCard from '$lib/components/topology/PlexusNodeCard.svelte';
   import ReceptorNodeCard from '$lib/components/topology/ReceptorNodeCard.svelte';
   import LayerGroup from '$lib/components/topology/LayerGroup.svelte';
-  import type { NodeConfig, ReceptorConfig } from '$lib/types';
+  import type { NodeConfig, ReceptorConfig, Severity } from '$lib/types';
   import { deriveLayers } from '$lib/config-helpers';
+  import { signalEvents, nodeHealth, now } from '$lib/stores/signals';
+  import { severityRank } from '$lib/util';
 
   let { data } = $props();
 
@@ -26,6 +28,16 @@
   const RECEPTOR_X = 820;
   const RECEPTOR_Y_BASE = 60;
   const RECEPTOR_SPACING = 110;
+
+  const ACTIVE_EDGE_WINDOW_MS = 1500;
+
+  const sevColor: Record<Severity, string> = {
+    info: 'var(--sev-info)',
+    notice: 'var(--sev-notice)',
+    warning: 'var(--sev-warning)',
+    anomaly: 'var(--sev-anomaly)',
+    critical: 'var(--sev-critical)'
+  };
 
   function buildFlowNodes(
     nodes: Record<string, NodeConfig>,
@@ -57,7 +69,7 @@
           parentId: `layer-${layer.name}`,
           extent: 'parent',
           position: { x: slot, y: 50 },
-          data: { shortId, node: config, health: 'healthy', pulsing: false }
+          data: { shortId, node: config }
         });
       });
     });
@@ -67,16 +79,16 @@
         id: receptorId,
         type: 'receptor',
         position: { x: RECEPTOR_X, y: RECEPTOR_Y_BASE + i * RECEPTOR_SPACING },
-        data: { receptorId, receptor, pulsing: false }
+        data: { receptorId, receptor }
       });
     });
 
     return out;
   }
 
-  function buildFlowEdges(receptors: Record<string, ReceptorConfig>): Edge[] {
+  const staticEdges = $derived.by<Edge[]>(() => {
     const edges: Edge[] = [];
-    for (const [receptorId, receptor] of Object.entries(receptors)) {
+    for (const [receptorId, receptor] of Object.entries(data.receptors)) {
       for (const nodeId of receptor.listens_to) {
         edges.push({
           id: `${nodeId}->${receptorId}`,
@@ -88,10 +100,42 @@
       }
     }
     return edges;
-  }
+  });
 
   let nodes: Node[] = $state(buildFlowNodes(data.nodes, data.receptors));
-  let edges: Edge[] = $state(buildFlowEdges(data.receptors));
+  let edges: Edge[] = $state([]);
+
+  // Reactively light up the edges that are currently carrying signals.
+  $effect(() => {
+    const cutoff = $now - ACTIVE_EDGE_WINDOW_MS;
+    const recent = $signalEvents.filter(
+      (e) => new Date(e.signal.timestamp).getTime() >= cutoff
+    );
+
+    const lit = new Map<string, Severity>();
+    for (const event of recent) {
+      for (const result of event.receptor_results) {
+        const id = `${event.signal.node_short_id}->${result.receptor_id}`;
+        const prev = lit.get(id);
+        if (!prev || severityRank(event.signal.severity) > severityRank(prev)) {
+          lit.set(id, event.signal.severity);
+        }
+      }
+    }
+
+    const base = staticEdges;
+    edges = base.map((e) => {
+      const sev = lit.get(e.id);
+      if (sev) {
+        return {
+          ...e,
+          animated: true,
+          style: `stroke: rgb(${sevColor[sev]}); stroke-width: 2; filter: drop-shadow(0 0 4px rgb(${sevColor[sev]} / 0.6));`
+        };
+      }
+      return { ...e, animated: false, style: 'stroke: rgb(var(--border)); stroke-dasharray: 4 4;' };
+    });
+  });
 
   let selection: { kind: 'node' | 'receptor'; id: string } | null = $state(null);
 
@@ -121,7 +165,7 @@
   <header class="flex items-center justify-between border-b border-border bg-surface px-6 py-3">
     <div>
       <h1 class="text-lg font-semibold tracking-wide">Topology</h1>
-      <p class="text-xs text-muted">Nodes grouped by layer, wired to receptors via <code class="mono">listens_to</code>. Edges will light up when signals flow.</p>
+      <p class="text-xs text-muted">Nodes grouped by layer, wired to receptors via <code class="mono">listens_to</code>. Edges light up as signals flow.</p>
     </div>
   </header>
 
@@ -143,6 +187,10 @@
         nodeColor={(n) => {
           if (n.type === 'layer') return 'rgb(var(--surface-2))';
           if (n.type === 'receptor') return 'rgb(var(--accent))';
+          const h = $nodeHealth[n.id] ?? 'healthy';
+          if (h === 'critical') return 'rgb(var(--sev-critical))';
+          if (h === 'anomaly') return 'rgb(var(--sev-anomaly))';
+          if (h === 'warning') return 'rgb(var(--sev-warning))';
           return 'rgb(var(--sev-healthy))';
         }}
         nodeStrokeColor={(n) => (n.type === 'layer' ? 'rgb(var(--border))' : 'rgb(var(--bg))')}
