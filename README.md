@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/plexus_readme_header_animated.svg" alt="Plexus — Signal Nervous System" />
+  <img src="assets/plexus_readme_header_animated_v2.svg" alt="Plexus — Signal Nervous System" />
 </p>
 
 > *Decentralize the sensing. Centralize the picture.*

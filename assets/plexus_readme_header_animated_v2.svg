@@ -1,0 +1,186 @@
+<svg width="100%" viewBox="0 0 680 200" role="img" xmlns="http://www.w3.org/2000/svg">
+  <title>Plexus — Signal Nervous System</title>
+  <desc>Animated README header for Plexus</desc>
+
+  <defs>
+    <style>
+      @keyframes hub-pulse {
+        0%,100% { r: 14; opacity: 0.9; }
+        50% { r: 17; opacity: 1; }
+      }
+      @keyframes hub-ring1 {
+        0% { r: 18; opacity: 0.5; }
+        100% { r: 36; opacity: 0; }
+      }
+      @keyframes hub-ring2 {
+        0% { r: 18; opacity: 0.4; }
+        100% { r: 50; opacity: 0; }
+      }
+      @keyframes node-in {
+        0% { opacity: 0; }
+        100% { opacity: 1; }
+      }
+      @keyframes node-blink {
+        0%,80%,100% { opacity: 1; }
+        85%,95% { opacity: 0.15; }
+        90% { opacity: 0.8; }
+      }
+      @keyframes line-in {
+        0% { stroke-dashoffset: 100; opacity: 0; }
+        20% { opacity: 0.5; }
+        100% { stroke-dashoffset: 0; opacity: 0.35; }
+      }
+      @keyframes travel-1 {
+        0% { stroke-dashoffset: 230; opacity: 0; }
+        5% { opacity: 1; }
+        90% { opacity: 1; }
+        100% { stroke-dashoffset: 0; opacity: 0; }
+      }
+      @keyframes travel-2 {
+        0% { stroke-dashoffset: 140; opacity: 0; }
+        5% { opacity: 1; }
+        90% { opacity: 1; }
+        100% { stroke-dashoffset: 0; opacity: 0; }
+      }
+      @keyframes travel-3 {
+        0% { stroke-dashoffset: 65; opacity: 0; }
+        5% { opacity: 1; }
+        90% { opacity: 1; }
+        100% { stroke-dashoffset: 0; opacity: 0; }
+      }
+      @keyframes travel-4 {
+        0% { stroke-dashoffset: 155; opacity: 0; }
+        5% { opacity: 1; }
+        90% { opacity: 1; }
+        100% { stroke-dashoffset: 0; opacity: 0; }
+      }
+      @keyframes travel-5 {
+        0% { stroke-dashoffset: 235; opacity: 0; }
+        5% { opacity: 1; }
+        90% { opacity: 1; }
+        100% { stroke-dashoffset: 0; opacity: 0; }
+      }
+      @keyframes action-in {
+        0% { stroke-dashoffset: 120; opacity: 0; }
+        20% { opacity: 0.5; }
+        100% { stroke-dashoffset: 0; opacity: 0.4; }
+      }
+      @keyframes box-in {
+        0% { opacity: 0; }
+        100% { opacity: 0.9; }
+      }
+
+      .node-1 { animation: node-in 0.6s ease-out 0.2s both; }
+      .node-2 { animation: node-in 0.6s ease-out 1.0s both; }
+      .node-3 { animation: node-in 0.6s ease-out 1.8s both; }
+      .node-4 { animation: node-in 0.6s ease-out 2.6s both; }
+      .node-5 { animation: node-in 0.6s ease-out 3.4s both; }
+
+      .dot-1 { animation: node-blink 3.1s ease-in-out 6s infinite; }
+      .dot-2 { animation: node-blink 4.2s ease-in-out 7.3s infinite; }
+      .dot-3 { animation: node-blink 3.7s ease-in-out 8.1s infinite; }
+      .dot-4 { animation: node-blink 5.0s ease-in-out 6.8s infinite; }
+      .dot-5 { animation: node-blink 3.4s ease-in-out 9.2s infinite; }
+
+      .line-1 { animation: line-in 1.2s ease-in 0.8s both; }
+      .line-2 { animation: line-in 1.2s ease-in 1.6s both; }
+      .line-3 { animation: line-in 1.2s ease-in 2.4s both; }
+      .line-4 { animation: line-in 1.2s ease-in 3.2s both; }
+      .line-5 { animation: line-in 1.2s ease-in 4.0s both; }
+
+      .travel-1 { animation: travel-1 2.2s ease-in 6s infinite; }
+      .travel-2 { animation: travel-2 1.8s ease-in 7.4s infinite; }
+      .travel-3 { animation: travel-3 1.2s ease-in 8.2s infinite; }
+      .travel-4 { animation: travel-4 2.0s ease-in 6.9s infinite; }
+      .travel-5 { animation: travel-5 2.4s ease-in 9.3s infinite; }
+
+      .hub-core  { animation: hub-pulse 2s ease-in-out infinite; }
+      .hub-ring1 { animation: hub-ring1 2s ease-out infinite; }
+      .hub-ring2 { animation: hub-ring2 2s ease-out 0.4s infinite; }
+
+      .action-line-1 { animation: action-in 1.5s ease-out 5.8s both; }
+      .action-line-2 { animation: action-in 1.5s ease-out 6.4s both; }
+      .action-box-1  { animation: box-in 0.8s ease-out 7.3s both; }
+      .action-box-2  { animation: box-in 0.8s ease-out 7.9s both; }
+    </style>
+  </defs>
+
+  <rect width="680" height="200" rx="12" fill="#080810"/>
+
+  <g class="node-1">
+    <circle cx="120" cy="52" r="9" fill="none" stroke="#534AB7" stroke-width="0.5" opacity="0.4"/>
+    <circle class="dot-1" cx="120" cy="52" r="5" fill="#534AB7"/>
+    <text x="120" y="42" font-family="ui-monospace,monospace" font-size="8" fill="#534AB7" text-anchor="middle">sec-gate</text>
+  </g>
+
+  <g class="node-2">
+    <circle cx="220" cy="28" r="9" fill="none" stroke="#185FA5" stroke-width="0.5" opacity="0.4"/>
+    <circle class="dot-2" cx="220" cy="28" r="5" fill="#185FA5"/>
+    <text x="220" y="18" font-family="ui-monospace,monospace" font-size="8" fill="#185FA5" text-anchor="middle">ing-pipe</text>
+  </g>
+
+  <g class="node-3">
+    <circle cx="350" cy="20" r="9" fill="none" stroke="#3C3489" stroke-width="0.5" opacity="0.4"/>
+    <circle class="dot-3" cx="350" cy="20" r="5" fill="#3C3489"/>
+    <text x="350" y="10" font-family="ui-monospace,monospace" font-size="8" fill="#3C3489" text-anchor="middle">build-01</text>
+  </g>
+
+  <g class="node-4">
+    <circle cx="480" cy="28" r="9" fill="none" stroke="#185FA5" stroke-width="0.5" opacity="0.4"/>
+    <circle class="dot-4" cx="480" cy="28" r="5" fill="#185FA5"/>
+    <text x="480" y="18" font-family="ui-monospace,monospace" font-size="8" fill="#185FA5" text-anchor="middle">agent-01</text>
+  </g>
+
+  <g class="node-5">
+    <circle cx="568" cy="52" r="9" fill="none" stroke="#534AB7" stroke-width="0.5" opacity="0.4"/>
+    <circle class="dot-5" cx="568" cy="52" r="5" fill="#534AB7"/>
+    <text x="568" y="42" font-family="ui-monospace,monospace" font-size="8" fill="#534AB7" text-anchor="middle">health</text>
+  </g>
+
+  <line class="line-1" x1="120" y1="52" x2="340" y2="80" stroke="#534AB7" stroke-width="1" stroke-dasharray="6,4" stroke-dashoffset="100"/>
+  <line class="line-2" x1="220" y1="28" x2="340" y2="80" stroke="#185FA5" stroke-width="1" stroke-dasharray="6,4" stroke-dashoffset="100"/>
+  <line class="line-3" x1="350" y1="20" x2="340" y2="80" stroke="#3C3489" stroke-width="1" stroke-dasharray="6,4" stroke-dashoffset="100"/>
+  <line class="line-4" x1="480" y1="28" x2="340" y2="80" stroke="#185FA5" stroke-width="1" stroke-dasharray="6,4" stroke-dashoffset="100"/>
+  <line class="line-5" x1="568" y1="52" x2="340" y2="80" stroke="#534AB7" stroke-width="1" stroke-dasharray="6,4" stroke-dashoffset="100"/>
+
+  <line class="travel-1" x1="120" y1="52" x2="340" y2="80" stroke="#AFA9EC" stroke-width="1.5" stroke-dasharray="8,230" stroke-dashoffset="230"/>
+  <line class="travel-2" x1="220" y1="28" x2="340" y2="80" stroke="#85B7EB" stroke-width="1.5" stroke-dasharray="8,140" stroke-dashoffset="140"/>
+  <line class="travel-3" x1="350" y1="20" x2="340" y2="80" stroke="#7F77DD" stroke-width="1.5" stroke-dasharray="8,65" stroke-dashoffset="65"/>
+  <line class="travel-4" x1="480" y1="28" x2="340" y2="80" stroke="#85B7EB" stroke-width="1.5" stroke-dasharray="8,155" stroke-dashoffset="155"/>
+  <line class="travel-5" x1="568" y1="52" x2="340" y2="80" stroke="#AFA9EC" stroke-width="1.5" stroke-dasharray="8,235" stroke-dashoffset="235"/>
+
+  <circle class="hub-ring2" cx="340" cy="80" r="18" fill="none" stroke="#1D9E75" stroke-width="0.5"/>
+  <circle class="hub-ring1" cx="340" cy="80" r="18" fill="none" stroke="#1D9E75" stroke-width="1"/>
+  <circle cx="340" cy="80" r="14" fill="#0a1a12" stroke="#1D9E75" stroke-width="1.5"/>
+  <circle class="hub-core" cx="340" cy="80" r="8" fill="#1D9E75"/>
+  <text x="340" y="108" font-family="ui-monospace,monospace" font-size="8" fill="#1D9E75" text-anchor="middle" opacity="0.7">THE PLEXUS</text>
+
+  <line class="action-line-1" x1="340" y1="80" x2="435" y2="152" stroke="#1D9E75" stroke-width="0.75" stroke-dasharray="4,5" stroke-dashoffset="120"/>
+  <line class="action-line-2" x1="340" y1="80" x2="535" y2="165" stroke="#1D9E75" stroke-width="0.75" stroke-dasharray="4,5" stroke-dashoffset="120"/>
+
+  <g class="action-box-1">
+    <rect x="382" y="146" width="110" height="24" rx="4" fill="#071510" stroke="#1D9E75" stroke-width="0.75"/>
+    <circle cx="394" cy="158" r="2.5" fill="#1D9E75" opacity="0.8"/>
+    <text x="402" y="155" font-family="ui-monospace,monospace" font-size="7.5" fill="#1D9E75">health-monitor</text>
+    <text x="402" y="166" font-family="ui-monospace,monospace" font-size="7" fill="#1D9E75" opacity="0.6">↳ Rebooting server</text>
+  </g>
+
+  <g class="action-box-2">
+    <rect x="482" y="160" width="96" height="24" rx="4" fill="#071510" stroke="#1D9E75" stroke-width="0.75"/>
+    <circle cx="494" cy="172" r="2.5" fill="#1D9E75" opacity="0.8"/>
+    <text x="502" y="169" font-family="ui-monospace,monospace" font-size="7.5" fill="#1D9E75">agent-invoker</text>
+    <text x="502" y="180" font-family="ui-monospace,monospace" font-size="7" fill="#1D9E75" opacity="0.6">↳ Agent dispatch</text>
+  </g>
+
+  <polygon points="44,128 58,120 72,128 72,144 58,152 44,144" fill="none" stroke="#534AB7" stroke-width="1.5"/>
+  <polygon points="47,130 58,123 69,130 69,142 58,149 47,142" fill="#3C3489" opacity="0.6"/>
+  <line x1="53" y1="136" x2="63" y2="136" stroke="#AFA9EC" stroke-width="1.5" stroke-linecap="round"/>
+  <circle cx="53" cy="136" r="1.8" fill="#AFA9EC"/>
+  <circle cx="63" cy="136" r="1.8" fill="#AFA9EC"/>
+  <line x1="58" y1="130" x2="58" y2="142" stroke="#AFA9EC" stroke-width="0.5" stroke-dasharray="2,2" opacity="0.5"/>
+  <text x="82" y="143" font-family="ui-monospace,monospace" font-size="26" font-weight="700" fill="#ffffff" letter-spacing="4">PLEXUS</text>
+  <line x1="82" y1="151" x2="280" y2="151" stroke="#2a2a35" stroke-width="0.5"/>
+  <text x="83" y="166" font-family="ui-monospace,monospace" font-size="10" fill="#534AB7" letter-spacing="3">SIGNAL NERVOUS SYSTEM</text>
+  <text x="83" y="184" font-family="-apple-system,sans-serif" font-size="11" fill="#555" letter-spacing="0.3">Decentralize the sensing. Centralize the picture.</text>
+
+</svg>
