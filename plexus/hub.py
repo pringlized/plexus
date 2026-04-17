@@ -1,112 +1,206 @@
+import hashlib
 import inspect
 import logging
 
-from plexus.adapters import get_receptor_class
-from plexus.loader import load_config
-from plexus.models import Severity, Signal
+from pydantic import BaseModel
 
-logger = logging.getLogger("plexus")
+from plexus import config
+from plexus.actions.base import BaseAction
+from plexus.actions.registry import get_action_class
+from plexus.loader import load_config
+from plexus.logging_config import configure_logging
+from plexus.models import (
+    ActionResult,
+    Severity,
+    Signal,
+    WireActionResult,
+    WireEvent,
+)
+
+logger = logging.getLogger(config.LOGGER_NAME)
+
+
+def _compute_pinch_id(source_file: str, source_function: str, source_line: int) -> str:
+    """Stable sha256[:12] of file:function:line — same line always same id."""
+    raw = f"{source_file}:{source_function}:{source_line}".encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()[:12]
 
 
 class PlexusHub:
     def __init__(
         self,
-        nodes_path: str,
-        receptors_path: str,
-        ui_endpoint: str | None = "http://localhost:5180/api/signal",
+        action_config: str | None = None,
+        ui_endpoint: str | None = None,
     ):
-        self.config = load_config(nodes_path, receptors_path)
-        self.ui_endpoint = ui_endpoint
-        self._sequences: dict[str, int] = {}
-        self._receptor_instances = self._init_receptors()
-        self._routing_table = self._build_routing_table()
+        # Library owns its own log file. Wires a file handler on the
+        # plexus.* logger the first time a hub is instantiated.
+        configure_logging()
 
-    def _init_receptors(self):
-        instances = {}
-        for rid, rcfg in self.config.receptors.items():
-            cls = get_receptor_class(rcfg.type)
-            instances[rid] = cls(receptor_id=rid, config=rcfg)
+        # Precedence: explicit arg > env var > default ("plexus-actions.yaml")
+        self.config = load_config(action_config or config.ACTION_CONFIG)
+        # Precedence: explicit arg > env var > None (no POST)
+        self.ui_endpoint = ui_endpoint or config.UI_ENDPOINT
+        self._sequences: dict[str, int] = {}
+        self._action_instances = self._init_actions()
+
+    def _init_actions(self) -> dict[str, BaseAction]:
+        instances: dict[str, BaseAction] = {}
+        for action_id, cfg in self.config.actions.items():
+            if not cfg.enabled:
+                logger.info(f"[action] '{action_id}' disabled — skipping init")
+                continue
+            cls = get_action_class(action_id)
+            instances[action_id] = cls(action_id=action_id, hub=self)
+
+        # Reject collisions — a single name can't be both an action and a batch.
+        overlap = set(instances) & set(self.config.batches)
+        if overlap:
+            raise ValueError(
+                f"action and batch share name(s): {sorted(overlap)}. "
+                f"Rename one side in plexus-actions.yaml."
+            )
         return instances
 
-    def _build_routing_table(self) -> dict[str, list[str]]:
-        # maps node_short_id → list of receptor_ids
-        table: dict[str, list[str]] = {}
-        for rid, rcfg in self.config.receptors.items():
-            for node_id in rcfg.listens_to:
-                table.setdefault(node_id, []).append(rid)
-        return table
+    # ---- Public surface ------------------------------------------------
 
     def pinch(
         self,
-        node_short_id: str,
         payload: dict,
-        severity: Severity = Severity.INFO,
-        category: str = "general",
+        severity: Severity,
+        layer: str | None = None,
+        action: str | None = None,
+        name: str | None = None,
     ) -> None:
-        # Capture call site — the file:line where pinch() was called
+        # Capture call site — file:line:function where pinch() was called
         frame = inspect.stack()[1]
         source_file = frame.filename
         source_line = frame.lineno
         source_function = frame.function
 
-        node = self.config.nodes.get(node_short_id)
-        if not node:
-            logger.warning(
-                f"Plexus: unknown node id '{node_short_id}' — pinch ignored"
-            )
-            return
+        pinch_id = _compute_pinch_id(source_file, source_function, source_line)
 
-        seq = self._sequences.get(node_short_id, 0) + 1
-        self._sequences[node_short_id] = seq
+        seq = self._sequences.get(pinch_id, 0) + 1
+        self._sequences[pinch_id] = seq
 
         signal = Signal(
-            node_short_id=node_short_id,
-            node_uuid=node.uuid,
-            node_type=node.type,
-            node_layer=node.layer,
-            node_description=node.description,
-            severity=severity,
-            category=category,
-            payload=payload,
-            sequence=seq,
+            pinch_id=pinch_id,
+            name=name,
             source_file=source_file,
             source_line=source_line,
             source_function=source_function,
+            severity=severity,
+            layer=layer,
+            payload=payload,
+            sequence=seq,
         )
 
-        receptor_ids = self._routing_table.get(node_short_id, [])
+        logger.info(
+            f"[pinch] {pinch_id}"
+            + (f" name={name!r}" if name else "")
+            + f" severity={severity.value} layer={layer or '-'} "
+            f"src={_basename(source_file)}:{source_line} fn={source_function}"
+        )
 
-        results = []
-        for rid in receptor_ids:
-            receptor = self._receptor_instances[rid]
-            result = receptor.receive(signal)
-            results.append(result)
-            logger.info(
-                f"[{signal.node_short_id}] → [{rid}] "
-                f"severity={signal.severity.value} "
-                f"category={signal.category} "
-                f"action={result.action}"
-                + (f" reason={result.flag_reason}" if result.flag_reason else "")
+        action_results: list[ActionResult] = []
+        resolved_batch: str | None = None
+
+        if action:
+            # action param accepts either a single action name or a batch name.
+            if action in self._action_instances:
+                action_results.append(self._fire_action(action, signal))
+            elif action in self.config.batches:
+                resolved_batch = action
+                action_results.extend(self._fire_batch(action, signal))
+            else:
+                logger.warning(
+                    f"[hub] unknown action or batch '{action}' "
+                    f"(signal={signal.signal_id}) — skipping"
+                )
+
+        # Build the rolled-up wire result. Strict: any failure = batch failed.
+        wire_action_result: WireActionResult | None = None
+        if action and action_results:
+            failed_details = [
+                r.detail for r in action_results if not r.ok and r.detail
+            ]
+            wire_action_result = WireActionResult(
+                batch=resolved_batch,
+                actions_fired=[r.action_id for r in action_results],
+                ok=all(r.ok for r in action_results),
+                detail="; ".join(failed_details) or None,
             )
 
-        # Even if no receptors matched, we still emit the event so the UI
-        # can show the broadcast.
-        event = {
-            "signal": signal.model_dump(mode="json"),
-            "receptor_results": [
-                {
-                    "receptor_id": r.receptor_id,
-                    "receptor_type": r.receptor_type,
-                    "action": r.action,
-                    "flag_reason": r.flag_reason,
-                }
-                for r in results
-            ],
-        }
-
+        event = WireEvent(
+            pinch_id=signal.pinch_id,
+            name=signal.name,
+            layer=signal.layer,
+            severity=signal.severity,
+            source_file=signal.source_file,
+            source_line=signal.source_line,
+            source_function=signal.source_function,
+            payload=signal.payload,
+            timestamp=signal.timestamp,
+            action=action,
+            action_result=wire_action_result,
+        )
         self._post_to_ui(event)
 
-    def _post_to_ui(self, event: dict) -> None:
+    # ---- Dispatch ------------------------------------------------------
+
+    def _fire_action(self, action_id: str, signal: Signal) -> ActionResult:
+        instance = self._action_instances.get(action_id)
+        if not instance:
+            logger.warning(
+                f"[hub] unknown or disabled action '{action_id}' — skipping "
+                f"(signal={signal.signal_id})"
+            )
+            return ActionResult(
+                action_id=action_id,
+                signal_id=signal.signal_id,
+                ok=False,
+                detail="unknown or disabled action",
+            )
+
+        logger.info(f"[action] firing '{action_id}' for signal {signal.signal_id}")
+        try:
+            result = instance.execute(signal)
+        except Exception as e:  # one bad action must not nuke the batch
+            logger.exception(f"[action] '{action_id}' raised: {e}")
+            return ActionResult(
+                action_id=action_id,
+                signal_id=signal.signal_id,
+                ok=False,
+                detail=f"exception: {e}",
+            )
+
+        logger.info(
+            f"[action] '{action_id}' → ok={result.ok}"
+            + (f" detail={result.detail}" if result.detail else "")
+        )
+        return result
+
+    def _fire_batch(self, batch_id: str, signal: Signal) -> list[ActionResult]:
+        batch_cfg = self.config.batches.get(batch_id)
+        if not batch_cfg:
+            logger.warning(f"[hub] unknown batch '{batch_id}' — skipping")
+            return [
+                ActionResult(
+                    action_id=batch_id,
+                    signal_id=signal.signal_id,
+                    ok=False,
+                    detail=f"unknown batch '{batch_id}'",
+                )
+            ]
+
+        logger.info(
+            f"[batch] executing '{batch_id}' ({len(batch_cfg.actions)} actions) "
+            f"for signal {signal.signal_id}"
+        )
+        return [self._fire_action(aid, signal) for aid in batch_cfg.actions]
+
+    # ---- Wire ----------------------------------------------------------
+
+    def _post_to_ui(self, event: BaseModel) -> None:
         """Fire-and-forget POST to the UI. Never raises."""
         if not self.ui_endpoint:
             return
@@ -115,9 +209,13 @@ class PlexusHub:
 
             httpx.post(
                 self.ui_endpoint,
-                json=event,
-                timeout=0.5,  # short timeout — UI may not be running
+                json=event.model_dump(mode="json"),
+                timeout=config.HTTPX_TIMEOUT,
             )
         except Exception:
             # UI being down never affects the hub.
             pass
+
+
+def _basename(path: str) -> str:
+    return path.rsplit("/", 1)[-1]

@@ -1,5 +1,5 @@
 import type { RequestHandler } from './$types';
-import { addSubscriber } from '$lib/server/signal-bus';
+import { addSubscriber } from '$lib/stores/stream.server';
 
 export const GET: RequestHandler = () => {
   let cleanup: (() => void) | null = null;
@@ -9,22 +9,18 @@ export const GET: RequestHandler = () => {
     start(controller) {
       const encoder = new TextEncoder();
 
-      const send = (payload: unknown) => {
+      const send = (data: unknown) => {
         try {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
         } catch {
-          // Client disconnected; cancel() will fire.
+          // client disconnected
         }
       };
 
-      // Initial ping so the browser knows it's connected.
       send({ type: 'connected' });
 
-      cleanup = addSubscriber((event) => {
-        send({ type: 'signal', payload: event });
-      });
+      cleanup = addSubscriber((event) => send({ type: 'signal', payload: event }));
 
-      // Periodic keep-alive comment to prevent idle proxies from closing.
       heartbeat = setInterval(() => {
         try {
           controller.enqueue(encoder.encode(`:keepalive\n\n`));

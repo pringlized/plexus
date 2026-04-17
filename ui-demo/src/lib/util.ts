@@ -1,7 +1,9 @@
-import type { HealthStatus, Severity } from './types';
+import type { Severity } from './types';
 
-export function relativeTime(ts: number, now: number): string {
-  const diff = Math.max(0, now - ts);
+export type LayerStatus = 'healthy' | Severity;
+
+export function relativeTime(ts: number, nowMs: number): string {
+  const diff = Math.max(0, nowMs - ts);
   if (diff < 1500) return 'now';
   const s = Math.floor(diff / 1000);
   if (s < 60) return `${s}s ago`;
@@ -21,30 +23,25 @@ export function severityClass(s: Severity): string {
   }[s];
 }
 
-export function severityRing(s: Severity | HealthStatus): string {
-  return {
-    healthy: 'ring-sev-healthy/50',
-    info: 'ring-sev-info/40',
-    notice: 'ring-sev-notice/50',
-    warning: 'ring-sev-warning/60',
-    anomaly: 'ring-sev-anomaly/70',
-    critical: 'ring-sev-critical/80'
-  }[s as 'healthy'];
-}
-
-export function healthDot(h: HealthStatus): string {
+export function statusDot(s: LayerStatus): string {
   return {
     healthy: 'bg-sev-healthy',
+    info: 'bg-sev-info',
+    notice: 'bg-sev-notice',
     warning: 'bg-sev-warning',
     anomaly: 'bg-sev-anomaly',
     critical: 'bg-sev-critical'
-  }[h];
+  }[s];
 }
 
-export function healthLabel(h: HealthStatus): string {
-  return h.toUpperCase();
+export function statusLabel(s: LayerStatus): string {
+  return s.toUpperCase();
 }
 
-export function severityRank(s: Severity): number {
-  return { info: 0, notice: 1, warning: 2, anomaly: 3, critical: 4 }[s];
+export function basename(path: string): string {
+  return path.split('/').pop() ?? path;
+}
+
+export function shortHash(pinchId: string, n = 8): string {
+  return pinchId.slice(0, n);
 }

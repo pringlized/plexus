@@ -1,13 +1,12 @@
 <script lang="ts">
-  import type { HealthStatus } from '$lib/types';
-  import { healthDot } from '$lib/util';
+  import { statusDot, type LayerStatus } from '$lib/util';
 
-  let { health, pulse = true }: { health: HealthStatus; pulse?: boolean } = $props();
+  let { status, pulse = true }: { status: LayerStatus; pulse?: boolean } = $props();
 </script>
 
 <span class="relative inline-flex h-2.5 w-2.5 items-center justify-center">
-  {#if pulse && health !== 'healthy'}
-    <span class="absolute inline-flex h-full w-full animate-ping rounded-full opacity-60 {healthDot(health)}"></span>
+  {#if pulse && status !== 'healthy' && status !== 'info'}
+    <span class="absolute inline-flex h-full w-full animate-ping rounded-full opacity-60 {statusDot(status)}"></span>
   {/if}
-  <span class="relative inline-flex h-2.5 w-2.5 rounded-full {healthDot(health)}"></span>
+  <span class="relative inline-flex h-2.5 w-2.5 rounded-full {statusDot(status)}"></span>
 </span>

@@ -1,22 +1,23 @@
 import yaml
-from plexus.models import PlexusConfig, NodeConfig, ReceptorConfig
+
+from plexus.models import ActionConfig, BatchConfig, PlexusConfig
 
 
-def load_config(nodes_path: str, receptors_path: str) -> PlexusConfig:
-    with open(nodes_path) as f:
-        nodes_raw = yaml.safe_load(f)
+def load_config(action_config: str) -> PlexusConfig:
+    with open(action_config) as f:
+        raw = yaml.safe_load(f) or {}
 
-    with open(receptors_path) as f:
-        receptors_raw = yaml.safe_load(f)
+    actions_raw = raw.get("actions", {}) or {}
+    batches_raw = raw.get("batches", {}) or {}
 
-    nodes = {
-        k: NodeConfig(**v)
-        for k, v in nodes_raw.get("nodes", {}).items()
+    actions = {
+        name: ActionConfig(**body)
+        for name, body in actions_raw.items()
     }
 
-    receptors = {
-        k: ReceptorConfig(**v)
-        for k, v in receptors_raw.get("receptors", {}).items()
+    batches = {
+        name: BatchConfig(actions=action_list)
+        for name, action_list in batches_raw.items()
     }
 
-    return PlexusConfig(nodes=nodes, receptors=receptors)
+    return PlexusConfig(actions=actions, batches=batches)

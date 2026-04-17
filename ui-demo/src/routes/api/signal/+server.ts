@@ -1,22 +1,15 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import type { SignalEvent } from '$lib/types';
-import { broadcast } from '$lib/server/signal-bus';
+import { broadcastSignal } from '$lib/stores/stream.server';
 
 export const POST: RequestHandler = async ({ request }) => {
   try {
-    const body = await request.json();
-
-    const event: SignalEvent = {
-      signal: body.signal,
-      receptor_results: body.receptor_results ?? [],
-      received_at: Date.now()
-    };
-
-    broadcast(event);
+    const body = (await request.json()) as Omit<SignalEvent, 'received_at'>;
+    const event: SignalEvent = { ...body, received_at: Date.now() };
+    broadcastSignal(event);
     return json({ ok: true });
   } catch {
-    // Never let a bad payload crash the server.
     return json({ ok: false }, { status: 400 });
   }
 };

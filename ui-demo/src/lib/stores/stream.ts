@@ -3,29 +3,24 @@ import type { SignalEvent } from '$lib/types';
 
 let eventSource: EventSource | null = null;
 
-export function startStream() {
+export function startStream(): void {
   if (typeof window === 'undefined') return;
-  if (eventSource) return; // already connected
-
+  if (eventSource) return;
   eventSource = new EventSource('/api/stream');
-
   eventSource.onmessage = (e) => {
     try {
       const data = JSON.parse(e.data);
-      if (data.type === 'signal') {
-        pushSignal(data.payload as SignalEvent);
-      }
+      if (data.type === 'signal') pushSignal(data.payload as SignalEvent);
     } catch {
-      // Malformed event — ignore.
+      // malformed event — ignore
     }
   };
-
   eventSource.onerror = () => {
-    // Browser auto-reconnects per SSE spec. Nothing to do here.
+    // browser auto-reconnects per SSE spec
   };
 }
 
-export function stopStream() {
+export function stopStream(): void {
   eventSource?.close();
   eventSource = null;
 }

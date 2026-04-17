@@ -1,12 +1,14 @@
 <script lang="ts">
   import { page } from '$app/stores';
-  import { LayoutDashboard, Network, Radio, Cpu, Radar } from 'lucide-svelte';
-  import type { NodeConfig, ReceptorConfig } from '$lib/types';
+  import { LayoutDashboard, Network, Radio, Cpu, Zap, Layers } from 'lucide-svelte';
+  import { nodes } from '$lib/stores/signals';
+  import { statusDot } from '$lib/util';
+  import type { ActionConfig, BatchConfig } from '$lib/types';
 
   let {
-    nodes,
-    receptors
-  }: { nodes: Record<string, NodeConfig>; receptors: Record<string, ReceptorConfig> } = $props();
+    actions,
+    batches
+  }: { actions: ActionConfig[]; batches: BatchConfig[] } = $props();
 
   const primary = [
     { href: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -50,38 +52,62 @@
     </ul>
 
     <div class="mt-5 px-3 text-[10px] uppercase tracking-widest text-muted">Nodes</div>
+    {#if $nodes.length === 0}
+      <div class="px-3 py-2 text-[11px] italic text-muted/60">Waiting for signals…</div>
+    {:else}
+      <ul class="mt-1 space-y-0.5">
+        {#each $nodes as n (n.pinch_id)}
+          {@const href = `/nodes/${n.pinch_id}`}
+          {@const active = isActive(href, $page.url.pathname)}
+          <li>
+            <a
+              {href}
+              class="flex items-center gap-2 rounded-md px-3 py-1.5 text-[12.5px] transition
+                {active ? 'bg-surface-2 text-text' : 'text-muted hover:bg-surface-2 hover:text-text'}"
+              title={`${n.source_function} · ${n.source_file}`}
+            >
+              <span class="inline-block h-1.5 w-1.5 rounded-full {statusDot(n.last_severity)}"></span>
+              <Cpu size={12} class="opacity-60" />
+              <span class="truncate">{n.name ?? n.pinch_id.slice(0, 8)}</span>
+            </a>
+          </li>
+        {/each}
+      </ul>
+    {/if}
+
+    <div class="mt-5 px-3 text-[10px] uppercase tracking-widest text-muted">Actions</div>
     <ul class="mt-1 space-y-0.5">
-      {#each Object.entries(nodes) as [shortId, node]}
-        {@const href = `/nodes/${shortId}`}
+      {#each actions as a (a.name)}
+        {@const href = `/actions/${a.name}`}
         {@const active = isActive(href, $page.url.pathname)}
         <li>
           <a
             {href}
             class="flex items-center gap-2 rounded-md px-3 py-1.5 text-[12.5px] transition
-              {active ? 'bg-surface-2 text-text' : 'text-muted hover:bg-surface-2 hover:text-text'}"
-            title={node.description}
+              {active ? 'bg-surface-2 text-text' : 'text-muted hover:bg-surface-2 hover:text-text'}
+              {a.enabled ? '' : 'opacity-50'}"
           >
-            <Cpu size={13} class="opacity-70" />
-            <span class="truncate">{shortId}</span>
+            <Zap size={13} class="opacity-70" />
+            <span class="truncate">{a.name}</span>
           </a>
         </li>
       {/each}
     </ul>
 
-    <div class="mt-5 px-3 text-[10px] uppercase tracking-widest text-muted">Receptors</div>
+    <div class="mt-5 px-3 text-[10px] uppercase tracking-widest text-muted">Batches</div>
     <ul class="mt-1 space-y-0.5">
-      {#each Object.entries(receptors) as [receptorId, receptor]}
-        {@const href = `/receptors/${receptorId}`}
+      {#each batches as b (b.name)}
+        {@const href = `/batches/${b.name}`}
         {@const active = isActive(href, $page.url.pathname)}
         <li>
           <a
             {href}
             class="flex items-center gap-2 rounded-md px-3 py-1.5 text-[12.5px] transition
               {active ? 'bg-surface-2 text-text' : 'text-muted hover:bg-surface-2 hover:text-text'}"
-            title={receptor.description}
+            title={b.actions.join(' · ')}
           >
-            <Radar size={13} class="opacity-70" />
-            <span class="truncate">{receptorId}</span>
+            <Layers size={13} class="opacity-70" />
+            <span class="truncate">{b.name}</span>
           </a>
         </li>
       {/each}

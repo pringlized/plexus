@@ -1,65 +1,51 @@
-export type NodeType = 'security' | 'ingestion' | 'build' | 'agent' | 'health' | 'pipeline';
 export type Severity = 'info' | 'notice' | 'warning' | 'anomaly' | 'critical';
-export type HealthStatus = 'healthy' | 'warning' | 'anomaly' | 'critical';
 
-export interface NodeConfig {
-  uuid: string;
-  type: NodeType;
-  layer: string;
-  description: string;
-}
+// ---- Wire envelope from Python hub ------------------------------------
 
-export interface ReceptorConfig {
-  uuid: string;
-  type: string;
-  description: string;
-  listens_to: string[];
-  config: {
-    severity_filter?: string[];
-    alert_label?: string;
-    [key: string]: unknown;
-  };
-}
-
-export interface PlexusConfig {
-  nodes: Record<string, NodeConfig>;
-  receptors: Record<string, ReceptorConfig>;
-}
-
-export interface LayerSummary {
-  name: string;
-  description: string;
-  nodes: Array<{ shortId: string; config: NodeConfig }>;
-}
-
-// ---- Signal event (from PlexusHub via POST /api/signal) ------------------
-
-export interface SignalData {
-  signal_id: string;
-  node_short_id: string;
-  node_uuid: string;
-  node_type: string;
-  node_layer: string;
-  node_description: string;
-  timestamp: string; // ISO 8601
-  severity: Severity;
-  category: string;
-  payload: Record<string, unknown>;
-  sequence: number;
-  source_file: string | null;
-  source_line: number | null;
-  source_function: string | null;
-}
-
-export interface ReceptorResultData {
-  receptor_id: string;
-  receptor_type: string;
-  action: 'discard' | 'flag' | 'flag+action';
-  flag_reason: string | null;
+export interface ActionResult {
+  batch: string | null;
+  actions_fired: string[];
+  ok: boolean;
+  detail?: string | null;
 }
 
 export interface SignalEvent {
-  signal: SignalData;
-  receptor_results: ReceptorResultData[];
-  received_at: number; // Date.now() set by the API route on receipt
+  pinch_id: string;
+  name: string | null;
+  layer: string | null;
+  severity: Severity;
+  source_file: string;
+  source_line: number;
+  source_function: string;
+  payload: Record<string, unknown>;
+  timestamp: string; // ISO 8601
+  action: string | null;
+  action_result: ActionResult | null;
+  received_at: number; // set by client store on receipt
+}
+
+// ---- Derived view models ----------------------------------------------
+
+export interface NodeSummary {
+  pinch_id: string;
+  name: string | null;
+  layer: string | null;
+  source_file: string;
+  source_function: string;
+  last_severity: Severity;
+  last_seen: number;
+  signal_count: number;
+}
+
+// ---- Action / batch config from plexus-actions.yaml -------------------
+
+export interface ActionConfig {
+  name: string;
+  enabled: boolean;
+  [key: string]: unknown;
+}
+
+export interface BatchConfig {
+  name: string;
+  actions: string[];
 }

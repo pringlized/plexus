@@ -15,7 +15,7 @@
 </script>
 
 <div class="flex h-screen w-screen overflow-hidden bg-bg text-text">
-  <Sidebar nodes={data.nodes} receptors={data.receptors} />
+  <Sidebar actions={data.actions} batches={data.batches} />
   <main class="flex min-w-0 flex-1 flex-col">
     <header class="flex h-12 items-center justify-end gap-2 border-b border-border bg-surface px-4">
       <span class="mr-auto text-xs uppercase tracking-widest text-muted">Live signals</span>

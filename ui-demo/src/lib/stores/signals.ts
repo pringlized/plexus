@@ -1,109 +1,140 @@
 import { writable, derived, type Readable } from 'svelte/store';
-import type { HealthStatus, SignalEvent } from '$lib/types';
+import type { NodeSummary, Severity, SignalEvent } from '$lib/types';
 
-// Ring buffer — keep last 500 events. Newest first.
 const MAX_SIGNALS = 500;
 const ACTIVE_WINDOW_MS = 10_000;
 
-export const signalEvents = writable<SignalEvent[]>([]);
+const SEV_RANK: Record<Severity, number> = {
+  info: 0,
+  notice: 1,
+  warning: 2,
+  anomaly: 3,
+  critical: 4
+};
 
-// Wall-clock tick so derived stores that care about "recent" (10s window)
-// naturally re-evaluate as time passes even when no new signals arrive.
+// ---- Raw signal stream + node registry --------------------------------
+
+export const signalEvents = writable<SignalEvent[]>([]);
+export const nodeRegistry = writable<Map<string, NodeSummary>>(new Map());
+
+// 1Hz wall-clock so the 10-second windows recompute even when no new
+// signals arrive.
 export const now = writable(Date.now());
 if (typeof window !== 'undefined') {
   setInterval(() => now.set(Date.now()), 1000);
 }
 
-export function pushSignal(event: SignalEvent) {
-  signalEvents.update((events) => {
-    const updated = [event, ...events];
-    return updated.slice(0, MAX_SIGNALS);
+export function pushSignal(event: SignalEvent): void {
+  signalEvents.update((events) => [event, ...events].slice(0, MAX_SIGNALS));
+
+  nodeRegistry.update((registry) => {
+    const prior = registry.get(event.pinch_id);
+    registry.set(event.pinch_id, {
+      pinch_id: event.pinch_id,
+      name: event.name ?? prior?.name ?? null,
+      layer: event.layer ?? prior?.layer ?? null,
+      source_file: event.source_file,
+      source_function: event.source_function,
+      last_severity: event.severity,
+      last_seen: event.received_at,
+      signal_count: (prior?.signal_count ?? 0) + 1
+    });
+    return new Map(registry);
   });
 }
 
-export function clearSignals() {
+export function clearSignals(): void {
   signalEvents.set([]);
+  nodeRegistry.set(new Map());
 }
 
-// Signals indexed by node short id.
-export const signalsByNode: Readable<Record<string, SignalEvent[]>> = derived(
-  signalEvents,
-  ($events) => {
-    const map: Record<string, SignalEvent[]> = {};
-    for (const event of $events) {
-      const id = event.signal.node_short_id;
-      (map[id] ??= []).push(event);
+// ---- Derived views ----------------------------------------------------
+
+export const nodes: Readable<NodeSummary[]> = derived(nodeRegistry, ($registry) =>
+  Array.from($registry.values()).sort((a, b) =>
+    (a.name ?? a.pinch_id).localeCompare(b.name ?? b.pinch_id)
+  )
+);
+
+export const nodesByLayer: Readable<Map<string, NodeSummary[]>> = derived(
+  nodeRegistry,
+  ($registry) => {
+    const map = new Map<string, NodeSummary[]>();
+    for (const node of $registry.values()) {
+      const layer = node.layer ?? 'Undefined';
+      if (!map.has(layer)) map.set(layer, []);
+      map.get(layer)!.push(node);
     }
     return map;
   }
 );
 
-// Signals that each receptor received, indexed by receptor id.
-export const signalsByReceptor: Readable<Record<string, SignalEvent[]>> = derived(
-  signalEvents,
-  ($events) => {
-    const map: Record<string, SignalEvent[]> = {};
-    for (const event of $events) {
-      for (const result of event.receptor_results) {
-        (map[result.receptor_id] ??= []).push(event);
+export const layerHealth: Readable<Record<string, Severity>> = derived(
+  [signalEvents, now],
+  ([$events, $now]) => {
+    const cutoff = $now - ACTIVE_WINDOW_MS;
+    const recent = $events.filter((e) => e.received_at > cutoff);
+    const health: Record<string, Severity> = {};
+    for (const e of recent) {
+      const layer = e.layer ?? 'Undefined';
+      const current = health[layer];
+      if (!current || SEV_RANK[e.severity] > SEV_RANK[current]) {
+        health[layer] = e.severity;
       }
     }
-    return map;
+    return health;
   }
 );
 
-// Active anomalies (anomaly/critical severity within the 10s window).
 export const activeAnomalies: Readable<number> = derived(
   [signalEvents, now],
   ([$events, $now]) => {
     const cutoff = $now - ACTIVE_WINDOW_MS;
     return $events.filter(
       (e) =>
-        (e.signal.severity === 'anomaly' || e.signal.severity === 'critical') &&
-        new Date(e.signal.timestamp).getTime() > cutoff
+        e.received_at > cutoff &&
+        (e.severity === 'anomaly' || e.severity === 'critical')
     ).length;
   }
 );
 
-// Health per layer, derived from recent signals. Recovers to healthy
-// automatically once 10s pass with no fresh non-healthy traffic.
-export const layerHealth: Readable<Record<string, HealthStatus>> = derived(
+// Only events that fired an action or batch.
+export const actionEvents: Readable<SignalEvent[]> = derived(signalEvents, ($events) =>
+  $events.filter((e) => e.action_result !== null)
+);
+
+// Live stream of "edge fired" events for the topology canvas.
+// Each entry is short-lived; topology subscribes and decays them over ~1.5s.
+export interface LiveEdge {
+  id: string;
+  source: string; // pinch_id
+  target: string; // batch-${name} or action-${name}
+  severity: Severity;
+  fired_at: number;
+}
+
+export const liveEdges: Readable<LiveEdge[]> = derived(
   [signalEvents, now],
   ([$events, $now]) => {
-    const cutoff = $now - ACTIVE_WINDOW_MS;
-    const recent = $events.filter((e) => new Date(e.signal.timestamp).getTime() > cutoff);
-
-    const health: Record<string, HealthStatus> = {};
-    for (const event of recent) {
-      const layer = event.signal.node_layer;
-      const sev = event.signal.severity;
-      const current = health[layer] ?? 'healthy';
-      if (sev === 'critical') health[layer] = 'critical';
-      else if (sev === 'anomaly' && current !== 'critical') health[layer] = 'anomaly';
-      else if (sev === 'warning' && current !== 'critical' && current !== 'anomaly')
-        health[layer] = 'warning';
+    const cutoff = $now - 1500;
+    const out: LiveEdge[] = [];
+    for (const e of $events) {
+      if (!e.action_result || e.received_at < cutoff) continue;
+      const target = e.action_result.batch
+        ? `batch-${e.action_result.batch}`
+        : `action-${e.action_result.actions_fired[0] ?? ''}`;
+      out.push({
+        id: `${e.pinch_id}->${target}`,
+        source: e.pinch_id,
+        target,
+        severity: e.severity,
+        fired_at: e.received_at
+      });
     }
-    return health;
+    return out;
   }
 );
 
-// Health per node — same logic, keyed by node short id.
-export const nodeHealth: Readable<Record<string, HealthStatus>> = derived(
-  [signalEvents, now],
-  ([$events, $now]) => {
-    const cutoff = $now - ACTIVE_WINDOW_MS;
-    const recent = $events.filter((e) => new Date(e.signal.timestamp).getTime() > cutoff);
-
-    const health: Record<string, HealthStatus> = {};
-    for (const event of recent) {
-      const node = event.signal.node_short_id;
-      const sev = event.signal.severity;
-      const current = health[node] ?? 'healthy';
-      if (sev === 'critical') health[node] = 'critical';
-      else if (sev === 'anomaly' && current !== 'critical') health[node] = 'anomaly';
-      else if (sev === 'warning' && current !== 'critical' && current !== 'anomaly')
-        health[node] = 'warning';
-    }
-    return health;
-  }
-);
+export function signalsForNode(pinchId: string): Readable<SignalEvent[]> {
+  return derived(signalEvents, ($events) => $events.filter((e) => e.pinch_id === pinchId));
+}

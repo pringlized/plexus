@@ -1,19 +1,33 @@
 import yaml from 'js-yaml';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import type { NodeConfig, ReceptorConfig } from '$lib/types';
+import type { ActionConfig, BatchConfig } from '$lib/types';
 
 export const prerender = false;
 
+interface RawConfig {
+  actions?: Record<string, { enabled?: boolean; [k: string]: unknown }>;
+  batches?: Record<string, string[]>;
+}
+
 export async function load() {
-  const nodesRaw = readFileSync(resolve('../plexus-nodes.yaml'), 'utf-8');
-  const receptorsRaw = readFileSync(resolve('../plexus-receptors.yaml'), 'utf-8');
+  const raw = readFileSync(resolve('../plexus-actions.yaml'), 'utf-8');
+  const cfg = (yaml.load(raw) ?? {}) as RawConfig;
 
-  const nodesConfig = yaml.load(nodesRaw) as { nodes: Record<string, NodeConfig> };
-  const receptorsConfig = yaml.load(receptorsRaw) as { receptors: Record<string, ReceptorConfig> };
+  const actions: ActionConfig[] = Object.entries(cfg.actions ?? {}).map(
+    ([name, body]) => ({
+      name,
+      enabled: body?.enabled ?? true,
+      ...body
+    })
+  );
 
-  return {
-    nodes: nodesConfig.nodes,
-    receptors: receptorsConfig.receptors
-  };
+  const batches: BatchConfig[] = Object.entries(cfg.batches ?? {}).map(
+    ([name, actionList]) => ({
+      name,
+      actions: actionList ?? []
+    })
+  );
+
+  return { actions, batches };
 }

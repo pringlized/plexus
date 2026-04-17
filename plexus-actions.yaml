@@ -1,0 +1,7 @@
+actions:
+  dispatch-security-agent:
+    enabled: true
+
+batches:
+  security-critical-response:
+    - dispatch-security-agent

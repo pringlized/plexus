@@ -13,57 +13,82 @@ class Severity(str, Enum):
     CRITICAL = "critical"
 
 
-class NodeType(str, Enum):
-    SECURITY = "security"
-    INGESTION = "ingestion"
-    BUILD = "build"
-    AGENT = "agent"
-    HEALTH = "health"
-    PIPELINE = "pipeline"
+# ---- Configuration -----------------------------------------------------
 
 
-class NodeConfig(BaseModel):
-    uuid: str
-    type: NodeType
-    layer: str
-    description: str
+class ActionConfig(BaseModel):
+    """One entry under `actions:` in plexus-actions.yaml.
+
+    Minimal on purpose. The action name IS the adapter — no type
+    indirection. Per-adapter config (credentials, channels, recipients)
+    lives wherever the adapter decides to read it from.
+    """
+    enabled: bool = True
 
 
-class ReceptorConfig(BaseModel):
-    uuid: str
-    type: str
-    description: str
-    listens_to: list[str]
-    config: dict[str, Any] = Field(default_factory=dict)
+class BatchConfig(BaseModel):
+    """One entry under `batches:` — ordered list of action names."""
+    actions: list[str]
 
 
 class PlexusConfig(BaseModel):
-    nodes: dict[str, NodeConfig]
-    receptors: dict[str, ReceptorConfig]
+    actions: dict[str, ActionConfig] = Field(default_factory=dict)
+    batches: dict[str, BatchConfig] = Field(default_factory=dict)
+
+
+# ---- Signal envelope ---------------------------------------------------
 
 
 class Signal(BaseModel):
     signal_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    node_short_id: str
-    node_uuid: str
-    node_type: NodeType
-    node_layer: str
-    node_description: str
+    # Stable sha256[:12] of source_file:source_function:source_line.
+    pinch_id: str
+    # Optional human label — UI shows this instead of the hash when set.
+    name: str | None = None
+    source_file: str
+    source_line: int
+    source_function: str
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     severity: Severity
-    category: str
+    layer: str | None = None
     payload: dict[str, Any]
     sequence: int
-    # Call site — captured automatically by hub.pinch()
-    source_file: str | None = None
-    source_line: int | None = None
-    source_function: str | None = None
 
 
-class ReceptorResult(BaseModel):
-    receptor_id: str
-    receptor_type: str
+# ---- Action result / wire envelope -------------------------------------
+
+
+class ActionResult(BaseModel):
+    """Per-action outcome returned by BaseAction.execute(). Internal."""
+    action_id: str
     signal_id: str
-    action: str            # "discard" | "flag" | "flag+action"
-    flag_reason: str | None = None
+    ok: bool
+    detail: str | None = None
     logged_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+# ---- Wire contract (flat) — what the UI receives over POST ------------
+
+
+class WireActionResult(BaseModel):
+    """Rolled-up outcome for whatever the pinch's `action` param resolved
+    to (single action or batch). One bool, one list of names that fired."""
+    batch: str | None = None      # batch name if `action` resolved to a batch
+    actions_fired: list[str]      # action names that actually executed
+    ok: bool                       # all() across constituent actions
+    detail: str | None = None      # joined failure details if any
+
+
+class WireEvent(BaseModel):
+    """Flat envelope POSTed to the UI. Spec source-of-truth shape."""
+    pinch_id: str
+    name: str | None = None
+    layer: str | None = None
+    severity: Severity
+    source_file: str
+    source_line: int
+    source_function: str
+    payload: dict[str, Any]
+    timestamp: datetime
+    action: str | None = None
+    action_result: WireActionResult | None = None
