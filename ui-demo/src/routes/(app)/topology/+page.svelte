@@ -18,7 +18,8 @@
     nodes as nodeStore,
     nodesByLayer,
     nodeRegistry,
-    liveEdges
+    liveEdges,
+    observedConnections
   } from '$lib/stores/signals';
   import type { NodeSummary, ActionConfig } from '$lib/types';
 
@@ -129,8 +130,8 @@
   const NODE_W = 220;
   const ACTION_W = 200;
 
-  let loadedView: { id: string; name: string } | null = $state(null);
-  let loadedLayout: SavedLayout | null = $state(null);
+  let loadedView = $state<{ id: string; name: string } | null>(null);
+  let loadedLayout = $state<SavedLayout | null>(null);
 
   function buildSavedFlowNodes(layout: SavedLayout): Node[] {
     const out: Node[] = [];
@@ -182,19 +183,34 @@
       : buildFlowNodes($nodesByLayer, data.actions)
   );
 
-  // Predrawn dashed edges from the saved layout. Sit underneath the
-  // animated live edges; same render style as the designer canvas.
-  const savedDashedEdges = $derived.by<Edge[]>(() => {
-    const conns = loadedLayout?.connections;
-    if (!conns) return [];
-    return conns.map((c, i) => ({
-      id: `dash-${c.pinch_id}-${c.action}-${i}`,
-      source: c.pinch_id,
-      target: `action-${c.action}`,
-      type: 'default',
-      animated: false,
-      style: 'stroke: #534AB7; stroke-width: 1; stroke-dasharray: 4 3;'
-    }));
+  // Predrawn dashed edges. In saved-view mode they come from the stored
+  // connection list; in live mode they accumulate from every (node, action)
+  // pair observed since page load. Sit underneath the animated live edges
+  // so each firing lights up its existing dashed route.
+  const dashedEdges = $derived.by<Edge[]>(() => {
+    const style = 'stroke: #534AB7; stroke-width: 1; stroke-dasharray: 4 3;';
+    if (loadedLayout) {
+      const conns = loadedLayout.connections ?? [];
+      return conns.map((c, i) => ({
+        id: `dash-${c.pinch_id}-${c.action}-${i}`,
+        source: c.pinch_id,
+        target: `action-${c.action}`,
+        type: 'default',
+        animated: false,
+        style
+      }));
+    }
+    return Array.from($observedConnections).map((key) => {
+      const [pinch, action] = key.split('|');
+      return {
+        id: `dash-${pinch}-${action}`,
+        source: pinch,
+        target: `action-${action}`,
+        type: 'default',
+        animated: false,
+        style
+      };
+    });
   });
   const dynamicEdges = $derived(
     $liveEdges.map((e) => ({
@@ -214,9 +230,7 @@
     nodes = flowNodes;
   });
   $effect(() => {
-    edges = loadedLayout
-      ? [...savedDashedEdges, ...dynamicEdges]
-      : dynamicEdges;
+    edges = [...dashedEdges, ...dynamicEdges];
   });
 
   // Manual fit-to-content: compute the bounding box from known dimensions
@@ -276,21 +290,38 @@
   });
 
   // ---- Load-view modal ------------------------------------------------
+  //
+  // The list always starts with a synthetic "Default Topology" entry that
+  // routes back to the live (auto-grouped) view. The currently displayed
+  // view — either the synthetic default or a saved one — is shown
+  // disabled in the modal so the user can see what they're already on.
+
+  const DEFAULT_VIEW_ID = '__default__';
+  const defaultViewEntry: SavedViewSummary = {
+    id: DEFAULT_VIEW_ID,
+    name: 'Default Topology',
+    description: 'Live layer view — nodes auto-group by layer as signals arrive.',
+    created_at: '',
+    updated_at: ''
+  };
 
   let showLoadModal = $state(false);
   let loadingViews = $state(false);
   let loadError: string | null = $state(null);
-  let availableViews: SavedViewSummary[] = $state([]);
+  let savedViews: SavedViewSummary[] = $state([]);
+
+  const modalViews = $derived([defaultViewEntry, ...savedViews]);
+  const currentViewId = $derived(loadedView ? loadedView.id : DEFAULT_VIEW_ID);
 
   async function openLoadModal() {
     showLoadModal = true;
     loadingViews = true;
     loadError = null;
-    availableViews = [];
+    savedViews = [];
     try {
       const res = await fetch('/api/views');
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      availableViews = (await res.json()) as SavedViewSummary[];
+      savedViews = (await res.json()) as SavedViewSummary[];
     } catch (e) {
       loadError = e instanceof Error ? e.message : String(e);
     } finally {
@@ -299,6 +330,11 @@
   }
 
   async function handleLoadSelected(view: SavedViewSummary) {
+    if (view.id === DEFAULT_VIEW_ID) {
+      returnToLive();
+      showLoadModal = false;
+      return;
+    }
     loadingViews = true;
     loadError = null;
     try {
@@ -371,7 +407,8 @@
 
   {#if showLoadModal}
     <LoadViewModal
-      views={availableViews}
+      views={modalViews}
+      currentId={currentViewId}
       loading={loadingViews}
       error={loadError}
       onload={handleLoadSelected}

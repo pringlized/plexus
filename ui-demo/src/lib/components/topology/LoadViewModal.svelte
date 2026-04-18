@@ -11,12 +11,15 @@
 
   let {
     views = [] as SavedViewSummary[],
+    currentId = null as string | null,
     loading = false,
     error = null as string | null,
     onload,
     oncancel
   }: {
     views?: SavedViewSummary[];
+    /** id of the view currently being shown — disabled in the list. */
+    currentId?: string | null;
     loading?: boolean;
     error?: string | null;
     onload: (view: SavedViewSummary) => void;
@@ -100,18 +103,31 @@
         <ul class="max-h-80 space-y-2 overflow-y-auto pr-1">
           {#each views as v (v.id)}
             {@const isSelected = v.id === selectedId}
+            {@const isCurrent = v.id === currentId}
             <li>
               <button
                 type="button"
                 onclick={() => (selectedId = v.id)}
+                disabled={isCurrent}
                 class="w-full rounded-md border px-3 py-2 text-left transition
-                  {isSelected
-                    ? 'border-accent bg-accent/10'
-                    : 'border-border bg-bg/40 hover:border-accent/60 hover:bg-bg/60'}"
+                  {isCurrent
+                    ? 'cursor-not-allowed border-border bg-bg/40 opacity-50'
+                    : isSelected
+                      ? 'border-accent bg-accent/10'
+                      : 'border-border bg-bg/40 hover:border-accent/60 hover:bg-bg/60'}"
               >
                 <div class="flex items-baseline justify-between gap-2">
-                  <div class="truncate text-sm font-medium text-text">{v.name}</div>
-                  <div class="shrink-0 text-[10px] text-muted">{fmtDate(v.updated_at)}</div>
+                  <div class="flex min-w-0 items-center gap-2">
+                    <div class="truncate text-sm font-medium text-text">{v.name}</div>
+                    {#if isCurrent}
+                      <span class="shrink-0 rounded bg-accent/20 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-accent">
+                        Currently viewing
+                      </span>
+                    {/if}
+                  </div>
+                  {#if v.updated_at}
+                    <div class="shrink-0 text-[10px] text-muted">{fmtDate(v.updated_at)}</div>
+                  {/if}
                 </div>
                 {#if v.description}
                   <div class="mt-0.5 truncate text-xs text-muted">{v.description}</div>

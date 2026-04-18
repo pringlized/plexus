@@ -17,6 +17,14 @@ const SEV_RANK: Record<Severity, number> = {
 export const signalEvents = writable<SignalEvent[]>([]);
 export const nodeRegistry = writable<Map<string, NodeSummary>>(new Map());
 
+// Cumulative set of every (pinch_id, action) connection observed since
+// page load. Survives the rolling MAX_SIGNALS cap so the predrawn dashed
+// routes on the live topology stay visible after the original firing
+// event has aged out of `signalEvents`.
+export const observedConnections = writable<Set<string>>(new Set());
+export const connectionKey = (pinchId: string, action: string) =>
+  `${pinchId}|${action}`;
+
 // 1Hz wall-clock so the 10-second windows recompute even when no new
 // signals arrive.
 export const now = writable(Date.now());
@@ -41,11 +49,26 @@ export function pushSignal(event: SignalEvent): void {
     });
     return new Map(registry);
   });
+
+  if (event.action_result) {
+    observedConnections.update((set) => {
+      let changed = false;
+      for (const action of event.action_result!.actions_fired) {
+        const key = connectionKey(event.pinch_id, action);
+        if (!set.has(key)) {
+          set.add(key);
+          changed = true;
+        }
+      }
+      return changed ? new Set(set) : set;
+    });
+  }
 }
 
 export function clearSignals(): void {
   signalEvents.set([]);
   nodeRegistry.set(new Map());
+  observedConnections.set(new Set());
 }
 
 // ---- Derived views ----------------------------------------------------
