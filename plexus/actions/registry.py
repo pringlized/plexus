@@ -1,6 +1,7 @@
 from pydantic import BaseModel, ConfigDict, field_validator
 
 from plexus.actions.base import BaseAction
+from plexus.actions.reboot_redis import RebootRedisServerAction
 from plexus.actions.security_agent import SecurityAgentAction
 
 
@@ -43,6 +44,7 @@ class ActionRegistry(BaseModel):
 ACTION_REGISTRY = ActionRegistry(
     classes={
         "dispatch-security-agent": SecurityAgentAction,
+        "reboot-redis-server": RebootRedisServerAction,
     }
 )
 

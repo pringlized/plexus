@@ -105,10 +105,12 @@ export const actionEvents: Readable<SignalEvent[]> = derived(signalEvents, ($eve
 
 // Live stream of "edge fired" events for the topology canvas.
 // Each entry is short-lived; topology subscribes and decays them over ~1.5s.
+// One edge per action that fired — batches fan out into N edges so every
+// action receives its own arrow from the pinch.
 export interface LiveEdge {
   id: string;
   source: string; // pinch_id
-  target: string; // batch-${name} or action-${name}
+  target: string; // action-${name}
   severity: Severity;
   fired_at: number;
 }
@@ -120,16 +122,16 @@ export const liveEdges: Readable<LiveEdge[]> = derived(
     const out: LiveEdge[] = [];
     for (const e of $events) {
       if (!e.action_result || e.received_at < cutoff) continue;
-      const target = e.action_result.batch
-        ? `batch-${e.action_result.batch}`
-        : `action-${e.action_result.actions_fired[0] ?? ''}`;
-      out.push({
-        id: `${e.pinch_id}->${target}`,
-        source: e.pinch_id,
-        target,
-        severity: e.severity,
-        fired_at: e.received_at
-      });
+      for (const actionName of e.action_result.actions_fired) {
+        const target = `action-${actionName}`;
+        out.push({
+          id: `${e.pinch_id}->${target}`,
+          source: e.pinch_id,
+          target,
+          severity: e.severity,
+          fired_at: e.received_at
+        });
+      }
     }
     return out;
   }

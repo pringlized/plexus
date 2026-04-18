@@ -2,6 +2,9 @@ actions:
   dispatch-security-agent:
     enabled: true
 
+  reboot-redis-server:
+    enabled: true
+
 batches:
   security-critical-response:
     - dispatch-security-agent

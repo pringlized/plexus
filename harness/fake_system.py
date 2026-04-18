@@ -154,6 +154,26 @@ def health_service_down(hub: PlexusHub) -> None:
     )
 
 
+# ---------- Servers -----------------------------------------------------
+
+
+def redis_down(hub: PlexusHub) -> None:
+    hub.pinch(
+        payload={
+            "service": "redis",
+            "host": random.choice(["redis-prod-01", "redis-prod-02"]),
+            "port": 6379,
+            "last_response_s": random.randint(15, 90),
+            "tcp_state": random.choice(["ECONNREFUSED", "TIMEOUT", "RST"]),
+            "consecutive_failures": random.randint(3, 12),
+        },
+        severity=Severity.CRITICAL,
+        layer="servers",
+        action="reboot-redis-server",
+        name="Redis server unreachable",
+    )
+
+
 # ---------- Randomization gateway ---------------------------------------
 
 # Weighted list so pings dominate (mirrors reality) and flaggable signals
@@ -169,6 +189,7 @@ _WEIGHTED: list[tuple[float, callable]] = [
     (4.0, agent_task_pickup),
     (6.0, health_heartbeat),
     (0.6, health_service_down),
+    (0.8, redis_down),
 ]
 
 

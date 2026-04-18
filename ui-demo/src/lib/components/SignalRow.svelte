@@ -49,7 +49,16 @@
     {/if}
   </div>
   <div class="mono pl-0.5 text-[10.5px] text-muted/80">
-    ↳ {basename(event.source_file)}:{event.source_line}
+    ↳
+    {#if compact}
+      <a
+        href={`/nodes/${event.pinch_id}`}
+        class="hover:text-accent hover:underline underline-offset-2"
+        onclick={(e) => e.stopPropagation()}
+      >{event.name ?? shortHash(event.pinch_id)}</a>
+      -
+    {/if}
+    {basename(event.source_file)}:{event.source_line}
   </div>
   {#if expanded && !compact}
     <pre class="mono overflow-x-auto rounded border border-border bg-bg px-3 py-2 text-[11px] text-text/80">{JSON.stringify(event.payload, null, 2)}</pre>

@@ -7,7 +7,7 @@
 Plexus is an open-source signal nervous system for complex software. Drop a
 single function call anywhere in your codebase — a **pinch** — and that
 moment becomes a named, typed, traceable signal that flows through a central
-hub to any number of receptors that know what to do with it.
+hub and optionally triggers a real-world action.
 
 Plexus is the wire. The wire does not decide what travels through it.
 
@@ -23,7 +23,7 @@ The traditional answer is monitoring dashboards — pull data periodically,
 display it, hope someone is looking when something goes wrong.
 
 **Plexus inverts this.** Every pinch is a live tap on a meaningful moment in
-your code. The signal fires immediately. Receptors respond in real time. The
+your code. The signal fires immediately. Actions respond in real time. The
 system does not wait to be checked.
 
 ---
@@ -35,28 +35,24 @@ system does not wait to be checked.
 ```python
 from plexus import PlexusHub, Severity
 
-hub = PlexusHub(
-    nodes_path="plexus-nodes.yaml",
-    receptors_path="plexus-receptors.yaml",
-)
+hub = PlexusHub()
 
-hub.pinch("sec-gate-01", {
-    "doc_id": "doc-881",
-    "threat": "homoglyph",
-    "char": "U+0430",
-    "word": "anthropic",
-    "scan_ms": 0.4,
-}, severity=Severity.CRITICAL, category="scan.critical")
+hub.pinch(
+    payload={"doc_id": "doc-881", "threat": "homoglyph", "char": "U+0430", "scan_ms": 0.4},
+    severity=Severity.CRITICAL,
+    layer="security",
+    name="Security scan critical",
+    action="security-critical-response",
+)
 ```
 
 That's it. The developer drops a pinch at a meaningful point in their code
 and walks away. Plexus handles everything else:
 
-- Looks up the node definition from config
 - Captures the exact **file, line, and function** where the pinch fired
-- Validates the signal envelope
-- Routes to every wired receptor
-- Each receptor evaluates and acts — or discards to `/dev/null`
+- Generates a stable hash ID from the call site — no registration required
+- Broadcasts the signal to the live UI
+- Fires the named action or batch if one is specified
 - Fires and forgets
 
 The pinch never blocks. The pinch never waits. The pinch never cares what
@@ -67,226 +63,186 @@ happens downstream.
 ## Core Concepts
 
 ### The Pinch
-A pinch is a single call to `hub.pinch()`. It marks a moment in your code
-as signal-worthy. Two required arguments — a node ID and a payload dict.
-Severity and category are optional.
 
-The payload is an unlimited key/value dict. Pass whatever is meaningful at
-that point in the code. Strings, numbers, bools, nested dicts, lists — any
-JSON-serializable value. No schema registration. No fixed fields. No
-migrations when you add new keys.
-
-Every pinch automatically captures its **call site** — the source file, line
-number, and function name where `hub.pinch()` was called. This is captured
-via Python's `inspect` module and carried on every signal. No extra work from
-the caller.
-
-When a downstream agent receives a flagged signal it has everything it needs:
-- **What** — node description from config
-- **Where** — exact file and line in the codebase
-- **What happened** — the full payload
-- **How bad** — severity
-- **Who flagged it** — which receptor and why
-
-The agent doesn't investigate. It executes.
-
-### Nodes
-A **Node** is a named pinch point. It exists as four lines in
-`plexus-nodes.yaml`. That's all it is.
-
-```yaml
-nodes:
-  sec-gate-01:
-    uuid: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
-    type: security
-    layer: security
-    description: "Security gate on knowledge base ingestion pipeline"
+```python
+hub.pinch(
+    payload,       # required — dict, unlimited k/v, JSON-serializable
+    severity,      # required — info | notice | warning | anomaly | critical
+    layer=None,    # optional — string, UI grouping
+    action=None,   # optional — action or batch name
+    name=None,     # optional — human label shown in CENTCOM
+)
 ```
 
-The node ID (`sec-gate-01`) is what you pass to `hub.pinch()`. The
-description is the human label. The layer is how the UI groups nodes
-visually. The type is what receptors filter on.
+**`payload`** — required. Unlimited key/value pairs. No schema. No fixed
+fields. No migrations. Pass whatever is meaningful at that point in the code.
 
-Nodes are purely conceptual. There is no registration process. There is no
-boot sequence. There is no node object in code. A node is just a name in a
-config file that gives a pinch point an identity.
+**`severity`** — required. No default. The developer must be intentional.
 
-**First-class node types:**
+**`layer`** — optional. Groups this signal visually in the UI. Any string.
+Layers emerge automatically from the signal stream — nothing pre-declared.
 
-| Type | Description |
-|---|---|
-| `security` | Character-level and pattern-based threat detection |
-| `ingestion` | Knowledge base ingestion pipeline events, document processing |
-| `build` | Build chain execution, dependency state, artifact generation |
-| `agent` | Agent task lifecycle, tool call patterns, context utilization |
-| `health` | Process heartbeat, resource utilization, connectivity state |
-| `pipeline` | Workflow state transitions, stage durations, stall detection |
+**`action`** — optional. The name of an action or batch to fire. Plexus
+looks up the name — action first, batch second. No action means the signal
+is a ping: flows through, updates the UI, disappears.
 
-Custom types are supported — any string. Plexus carries it faithfully.
+**`name`** — optional. Human label shown in CENTCOM instead of the hash.
 
-### Signals
-A **Signal** is the envelope Plexus builds around every pinch. The caller
-provides the payload. Plexus builds everything else automatically.
+### The Ping
+
+A pinch with no action is a ping. It flows through the hub, the UI reflects
+it, and it disappears. This is the most common case. Heartbeats, clean scan
+results, status updates — all pings. Presence and data. Nothing more.
+
+### Node Identity — The Call Site Hash
+
+Every unique pinch location has a stable identity derived automatically from
+the call site:
+
+```python
+raw = f"{source_file}:{source_function}:{source_line}"
+pinch_id = sha256(raw).hexdigest()[:12]  # e.g. "d2aec78bf786"
+```
+
+Same file, same function, same line — same ID. Every time. No registration.
+No YAML entry. No boot sequence. The code creates the node by running.
+
+Nodes appear in CENTCOM automatically the first time their pinch fires.
+Plexus starts with zero nodes. The system picture builds itself.
+
+### The Signal Envelope
+
+Every signal carries:
 
 | Field | Source | Description |
 |---|---|---|
-| `signal_id` | auto | UUID, globally unique |
-| `node_short_id` | caller | the node ID passed to pinch() |
-| `node_uuid` | config | stable UUID from plexus-nodes.yaml |
-| `node_type` | config | type string from config |
-| `node_layer` | config | layer from config |
-| `node_description` | config | human description from config |
+| `pinch_id` | auto | 12-char hash of file+function+line |
+| `name` | caller | optional human label |
+| `layer` | caller | optional grouping string |
 | `severity` | caller | info / notice / warning / anomaly / critical |
-| `category` | caller | caller-defined classification string |
 | `payload` | caller | unlimited k/v dict |
-| `sequence` | auto | monotonically increasing per node |
-| `timestamp` | auto | UTC at time of pinch |
 | `source_file` | auto | file where hub.pinch() was called |
-| `source_line` | auto | line number where hub.pinch() was called |
-| `source_function` | auto | function name where hub.pinch() was called |
+| `source_line` | auto | line number |
+| `source_function` | auto | function name at call site |
+| `timestamp` | auto | UTC at time of pinch |
+| `action` | caller | optional action or batch name |
 
 ### The Hub
-`PlexusHub` is the central router. It loads config on init, builds a routing
-table from `listens_to` mappings, and exposes one public method: `pinch()`.
 
-The hub has no opinions. It does not evaluate signals. It does not decide
-what matters. It routes what arrives to whoever asked to receive it.
+`PlexusHub` is the center. It receives every pinch, builds the signal
+envelope, broadcasts to the UI, and fires the action or batch if one is
+defined. It has no opinions. It does not evaluate signals. It does not
+decide what matters.
 
-### Receptors
-A **Receptor** is where the intelligence lives. A Python class with a single
-`receive(signal)` method that returns one of three decisions:
+### Actions — The Real Adapters
 
-- `discard` — signal goes to `/dev/null`. Nothing written. Signal never existed.
-- `flag` — signal is flagged with a human-readable reason.
-- `flag+action` — flagged and an action is queued (rev2).
+An action is a Python class with one job. It receives the full signal
+envelope and does its specific thing.
 
-Receptors are defined in `plexus-receptors.yaml` and mapped to nodes via
-`listens_to`. A receptor can listen to one node or fifty. A node can feed
-one receptor or ten. The wiring is pure config.
-
-```yaml
-receptors:
-  security-alerter:
-    uuid: "r1a2b3c4-..."
-    type: alerter
-    description: "Flags and alerts on security anomalies and criticals"
-    listens_to:
-      - sec-gate-01
-      - sec-auth-01
-    config:
-      severity_filter:
-        - warning
-        - anomaly
-        - critical
-      alert_label: "SECURITY ALERT"
+```python
+class BaseAction:
+    def __init__(self, config: dict): ...
+    def execute(self, signal: Signal) -> None: ...
 ```
 
-**First-class receptor types:**
+Every action gets the complete signal. What it ignores is its own business.
+If a developer wires the wrong action to a signal — that is the developer's
+problem. **Plexus does not babysit.**
 
-| Type | Description |
-|---|---|
-| `alerter` | Flags signals matching severity filter |
-| `health_aggregator` | Rolls up node signals into layer health status |
-| `logger` | Structured debug logging, all signals |
-| `agent-invoker` | Dispatches a focused agent on match (rev2) |
-| `threshold-watcher` | Fires when a metric crosses a boundary (rev2) |
+Actions are defined in `plexus-actions.yaml`:
 
-**Building a custom receptor** — describe what you want to an LLM, point it
-at `plexus/receptors/base.py`, and iterate. One method. No other knowledge
-of Plexus internals required.
+```yaml
+actions:
+  dispatch-security-agent:
+    enabled: true
+
+  reboot-redis-server:
+    enabled: true
+
+batches:
+  security-critical-response:
+    - dispatch-security-agent
+```
+
+**Adding a new action:** one adapter class, one registry entry, one YAML
+line. Plexus core does not change.
+
+### Batches — Fan-Out
+
+A batch is a named collection of actions. The same complete signal is
+dispatched to every action in the batch simultaneously. Same signal. Every
+action. In parallel.
 
 ### System Layers
-Layers are conceptual groupings of nodes. They exist as a string in the node
-config — nothing more. Type a new layer name, refresh, and it appears in the
-topology, the dashboard health cards, and the nav. No registration. No
-migration. No restart.
+
+Layers are strings on the pinch. Nothing more. Type a new layer name and it
+appears in the topology, the dashboard health cards, and the nav on the next
+signal. No registration. No migration. No restart.
+
+Plexus starts with zero layers. They emerge from the signal stream.
 
 ---
 
 ## Configuration
 
-Everything lives in two files. These files are the source of truth for the
-entire system — the UI, the routing table, the topology canvas, the nav,
-every detail page.
+One file. That is the complete configuration surface.
 
-**`plexus-nodes.yaml`** — node definitions. Four fields per node.
+**`plexus-actions.yaml`** — actions and batches. What the system can do.
 
-**`plexus-receptors.yaml`** — receptor definitions and wiring.
-
-Adding a new node: four lines of YAML. Refresh. It appears in the nav,
-the topology, and as a working detail page. Zero code changes.
-
-Adding a new layer: type a new string in the `layer` field. Refresh. Done.
-
-Topology changes are git commits. Every wiring change is diffable,
-reviewable, and reversible. `git revert` is your rollback.
+No node config file. No receptor config file. Nodes register themselves from
+the signal stream. Layers emerge from the pinch. The code is the
+configuration.
 
 ---
 
-## Use Cases
+## CENTCOM — The Visual Operations Layer
 
-### Knowledge Base Ingestion Security
-Wire a character-level scanner (such as
-[glassglyph-scanner](https://github.com/pringlized/glassglyph-scanner)) as a
-`security` node on your knowledge base ingestion pipeline. Every document
-scanned emits a signal. Clean documents emit `info`. Suspicious content emits
-`warning` through `critical`. A `security-alerter` receptor flags it
-immediately with the exact file and line where the gate fired.
+Plexus ships a SvelteKit UI that builds itself from the live signal stream
+and `plexus-actions.yaml`. Nothing is hardcoded. Nothing is pre-declared.
 
-You are no longer auditing logs after the fact. You are watching the gate
-fire in real time.
+**On load:** zero nodes, zero layers. Actions and batches load from YAML.
 
-### Agentic Workflow Observability
-In multi-agent systems, individual agents operate in isolation. Plexus gives
-you a unified view across all of them. Each agent drops pinches on task
-pickup, tool calls, completion, and anomalous behavior. The source file:line
-on every signal tells you not just that an agent acted but exactly which line
-of code triggered it.
-
-### Build Pipeline Intelligence
-Wire your build system as a `build` node. Pinch on dependency resolution,
-stage transitions, artifact generation, and failures. When a stage fails the
-flagged signal carries the exact file and function that fired — the starting
-point for any automated investigation.
-
-### Any System That Produces Events
-If your component has a moment worth watching, drop a pinch. The config gives
-it a name. The receptor gives it meaning.
-
----
-
-## The Visual System
-
-Plexus ships a SvelteKit UI driven entirely by the YAML config. The nav,
-topology, and all detail pages build themselves from the config files. No
-hardcoded UI. No admin panel. No database-backed node management.
-
-### Topology
-A Svelte Flow canvas showing nodes grouped into layer regions, wired to
-receptors. Edges animate with severity-appropriate color when signals flow.
+**As signals arrive:** nodes appear in the nav, layers materialize as health
+cards, the topology canvas populates automatically — grouped by layer,
+colored by severity.
 
 ### Dashboard
-Layer health cards, live signal feed, stats. All derived from the live
-signal stream.
 
-### Live Signal Monitor
-Three-column real-time view: node broadcasts → receptor receipts → receptor
-actions. Every signal row shows `filename.py:line` from the call site.
+Layer health cards emerge from the signal stream. Stats update live. Signal
+feed shows every pinch with name, call site, and expandable payload.
 
-### Node & Receptor Detail Pages
-Dynamic routes driven by config. Every node and receptor in the YAML has
-a working detail page automatically.
+### Topology
+
+Nodes auto-place by layer on the left. Actions and batches appear on the
+right. Edges animate when a batch fires. Node health rings pulse with
+severity color. Critical nodes glow. Healthy nodes dim.
+
+### Monitor
+
+Three columns live: node broadcasts → action receipts → action results.
+Every signal row shows `filename.py:line` from the call site. Click any row
+to expand the full payload.
+
+### Node Detail
+
+Per-node signal history, call site, expandable payload on every signal.
+The route exists the moment the first signal from that location arrives.
+
+### Action & Batch Detail
+
+Per-action invocation history, success rate, which nodes triggered it, what
+payload came through. Per-batch execution history with full fan-out detail.
 
 <p align="center">
   <img src="assets/plexus-dashboard.png" alt="Plexus Dashboard" />
   <br/>
-  <em>Dashboard — layer health, live signal feed, and at-a-glance stats.</em>
+  <em>Dashboard — layers emerge from the signal stream. Nothing pre-declared.</em>
 </p>
 
 <p align="center">
   <img src="assets/plexus-topology.png" alt="Plexus Topology" />
   <br/>
-  <em>Topology — nodes grouped by layer, wired to receptors. Edges light up as signals flow.</em>
+  <em>Topology — nodes auto-register from the signal stream. Actions and batches from YAML.</em>
 </p>
 
 ---
@@ -311,12 +267,54 @@ cd ..
 python harness/runner.py
 ```
 
-The harness fires pinches across five fake system components — security
+The harness fires pinches across multiple fake system components — security
 scanner, ingestion pipeline, build engine, agent worker, health monitor.
-The UI receives them live and renders in real time.
+Each component has unique call sites producing unique node IDs. The UI
+receives signals live and the system picture builds itself in real time.
 
-Watch the topology edges light up. Watch the security layer flip to anomaly.
-Watch every signal row show `fake_system.py:47`.
+Watch the topology populate. Watch layers materialize. Watch critical nodes
+glow. Watch the security agent dispatch and log its response.
+
+---
+
+## Use Cases
+
+### Knowledge Base Ingestion Security
+
+Wire a character-level scanner such as
+[glassglyph-scanner](https://github.com/pringlized/glassglyph-scanner) as a
+security pinch on your ingestion pipeline. Every document scanned fires a
+signal. A critical finding triggers an action that dispatches a security agent
+with the full payload — doc ID, threat type, character, scan duration. The
+agent knows exactly what happened, exactly where in the code it happened,
+and exactly what to do about it. No log archaeology. No investigation.
+
+### Agentic Workflow Observability
+
+In multi-agent systems, individual agents operate in isolation. Plexus gives
+you a unified live picture across all of them. Each agent drops pinches on
+task pickup, tool calls, completion, and anomalous behavior. The call site
+on every signal tells you not just that an agent acted but exactly which
+line of code triggered it.
+
+### Infrastructure Response Automation
+
+A pinch fires when Redis becomes unreachable. The action is
+`reboot-redis-server`. The adapter runs the reboot script. The result flows
+back through the hub. CENTCOM shows the signal, the action, and the result.
+The whole incident lifecycle visible in one place.
+
+### Build Pipeline Intelligence
+
+Pinch on dependency resolution, stage transitions, artifact generation, and
+failures. When a build stage fails, the signal carries exit code, stage name,
+and error detail. An action dispatches an ops agent with everything it needs.
+
+### Any System That Produces Events
+
+If your component has a moment worth watching, drop a pinch. Name it. Layer
+it. Wire an action if needed. Plexus is not domain-specific. It carries
+whatever you tell it to carry.
 
 ---
 
@@ -324,7 +322,7 @@ Watch every signal row show `fake_system.py:47`.
 
 **Python Library**
 - Python 3.11+
-- Pydantic v2 — all models and config validation
+- Pydantic v2 — all models and signal envelope validation
 - PyYAML — config loading
 - httpx — fire-and-forget POST to UI
 
@@ -338,22 +336,24 @@ Watch every signal row show `fake_system.py:47`.
 
 ## Project Status
 
-Plexus rev1 is running.
+Plexus is in active development.
 
-**Rev1 — complete**
-- `PlexusHub` with routing table and receptor evaluation
-- YAML-driven config — nodes and receptors in two files
+**Current — working**
+- `PlexusHub` — signal routing, action dispatch, fire-and-forget
 - `hub.pinch()` with automatic call site capture (file:line:function)
-- Unlimited k/v payload dict
-- Alerter, health-aggregator, and logger receptor types
-- SvelteKit UI driven entirely by YAML config
+- Call site hash as stable node identity — no registration required
+- Unlimited k/v payload
+- Actions and batches — adapter pattern, fan-out
+- SvelteKit CENTCOM UI — zero state on load, nodes auto-register from stream
 - Live signal flow: pinch → hub → HTTP POST → SSE → browser store → UI
+- Node, action, and batch detail pages with live data and expandable payloads
 
-**Rev2 — next**
-- Flagged signal persistence (SQLAlchemy + Postgres)
-- Receptor actions (agent-invoker, threshold-watcher)
-- Topology canvas editing — draw lines, rewrites YAML atomically
-- WebSocket signal stream
+**Coming next**
+- Logbook table — node hash registry with TTL, first seen, last seen
+- Actions audit table — every action executed, signal that triggered it,
+  result, timestamp
+- Custom topology views — drag, group, name, save layouts
+- Plexus drops into Praetor — first live production deployment
 
 Contributions, feedback, and discussion welcome.
 
@@ -363,14 +363,14 @@ Contributions, feedback, and discussion welcome.
 
 Most observability platforms try to be smart. They correlate for you, decide
 what critical means, ship opinions about what your system should look like.
-You inherit their assumptions, and anything that doesn't fit drops out of view.
+You inherit their assumptions and anything that doesn't fit drops out of view.
 
-Plexus stays deliberately simple. Four primitives — nodes, signals, the hub,
-receptors. The hub has no opinions. The config owns the structure. The
-receptors own the logic. The pinch owns nothing except the moment it marks.
+Plexus stays deliberately simple. Three primitives: the pinch, the hub, the
+action. The hub has no opinions. The code owns the node identity. The action
+owns the response logic. The pinch owns nothing except the moment it marks.
 
-Two YAML files. An LLM can write them in two minutes. Git tracks every change.
-The topology is always honest because it has nowhere to hide.
+One YAML file. An LLM can write it in two minutes. Git tracks every change.
+The system picture is always honest because it has nowhere to hide.
 
 The restraint is the point.
 

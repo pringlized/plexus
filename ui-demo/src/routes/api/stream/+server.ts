@@ -1,5 +1,5 @@
 import type { RequestHandler } from './$types';
-import { addSubscriber } from '$lib/stores/stream.server';
+import { addSubscriber, getRecentEvents } from '$lib/stores/stream.server';
 
 export const GET: RequestHandler = () => {
   let cleanup: (() => void) | null = null;
@@ -18,6 +18,12 @@ export const GET: RequestHandler = () => {
       };
 
       send({ type: 'connected' });
+
+      // Replay the recent ring buffer so a new client (refresh, new tab,
+      // SSE auto-reconnect, navigation) catches up to current state.
+      for (const event of getRecentEvents()) {
+        send({ type: 'signal', payload: event });
+      }
 
       cleanup = addSubscriber((event) => send({ type: 'signal', payload: event }));
 

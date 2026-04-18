@@ -2,6 +2,7 @@
   import { ArrowLeft, CheckCircle2, X, Layers, Zap } from 'lucide-svelte';
   import { page } from '$app/stores';
   import SeverityBadge from '$lib/components/SeverityBadge.svelte';
+  import JsonToggle from '$lib/components/JsonToggle.svelte';
   import { actionEvents, now } from '$lib/stores/signals';
   import { basename, relativeTime, shortHash } from '$lib/util';
 
@@ -89,6 +90,7 @@
             {#if e.action_result?.detail}
               <div class="mono mt-0.5 text-[10.5px] text-sev-critical/80">{e.action_result.detail}</div>
             {/if}
+            <JsonToggle data={e} label="Signal JSON" />
           </div>
         {/each}
         {#if myEvents.length === 0}

@@ -3,6 +3,7 @@
   import { CheckCircle2, X, Zap } from 'lucide-svelte';
   import SeverityBadge from '$lib/components/SeverityBadge.svelte';
   import SignalRow from '$lib/components/SignalRow.svelte';
+  import JsonToggle from '$lib/components/JsonToggle.svelte';
   import { signalEvents, actionEvents, now, nodesByLayer } from '$lib/stores/signals';
   import { basename, relativeTime, shortHash } from '$lib/util';
 
@@ -87,6 +88,7 @@
             <div class="mono mt-0.5 text-[11px] text-muted">
               ← {e.name ?? shortHash(e.pinch_id)} · {basename(e.source_file)}:{e.source_line}
             </div>
+            <JsonToggle data={e} label="Signal JSON" />
           </div>
         {/each}
         {#if receipts.length === 0}
@@ -129,6 +131,7 @@
                   {e.action_result.detail}
                 </div>
               {/if}
+              <JsonToggle data={e} label="Signal JSON" />
             </div>
           {/if}
         {/each}
