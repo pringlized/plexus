@@ -5,13 +5,25 @@
     Controls,
     useSvelteFlow,
     type Node,
-    type Edge
+    type Edge,
+    type NodeTypes
   } from '@xyflow/svelte';
-  import { ArrowLeft, Check, Cpu, Save, Zap } from 'lucide-svelte';
+  import { ArrowLeft, Check, Cpu, FolderOpen, Save, Zap } from 'lucide-svelte';
   import { statusDot } from '$lib/util';
-  import DesignerNodeCard, { type DesignerNode } from './DesignerNodeCard.svelte';
-  import DesignerActionCard, { type DesignerAction } from './DesignerActionCard.svelte';
+  import DesignerNodeCard from './DesignerNodeCard.svelte';
+  import DesignerActionCard from './DesignerActionCard.svelte';
+  import type { DesignerNode, DesignerAction } from './types';
   import SaveViewModal from './SaveViewModal.svelte';
+  import LoadViewModal from './LoadViewModal.svelte';
+  import FitToContent from '../FitToContent.svelte';
+
+  interface SavedViewSummary {
+    id: string;
+    name: string;
+    description: string | null;
+    created_at: string;
+    updated_at: string;
+  }
 
   // ---- Fake data (will be live in a future revision) -------------------
 
@@ -116,7 +128,7 @@
   // directly on drop/delete rather than recomputing from a derived store,
   // so the viewport never jumps around on structural changes.
 
-  const nodeTypes = {
+  const nodeTypes: NodeTypes = {
     designerNode: DesignerNodeCard,
     designerAction: DesignerActionCard
   };
@@ -199,6 +211,120 @@
   function onCanvasDragOver(e: DragEvent) {
     e.preventDefault();
     if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+  }
+
+  // ---- Load view -------------------------------------------------------
+
+  let showLoadModal = $state(false);
+  let loadingViews = $state(false);
+  let loadError: string | null = $state(null);
+  let availableViews: SavedViewSummary[] = $state([]);
+
+  async function openLoadModal() {
+    showLoadModal = true;
+    loadingViews = true;
+    loadError = null;
+    availableViews = [];
+    try {
+      const res = await fetch('/api/views');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      availableViews = (await res.json()) as SavedViewSummary[];
+    } catch (e) {
+      loadError = e instanceof Error ? e.message : String(e);
+    } finally {
+      loadingViews = false;
+    }
+  }
+
+  // Approximate rendered card dimensions — used for fit-to-content math.
+  // Real measured DOM size would require a ResizeObserver round-trip; these
+  // are within a few pixels of actual and good enough for framing.
+  const NODE_W = 220;
+  const NODE_H = 78;
+  const ACTION_W = 200;
+  const ACTION_H = 64;
+
+  let canvasEl: HTMLDivElement | undefined = $state();
+  let fitTarget: { x: number; y: number; zoom: number } | null = $state(null);
+
+  function fitToNodes(ns: Node[]) {
+    if (!canvasEl || ns.length === 0) return;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const n of ns) {
+      const w = n.type === 'designerNode' ? NODE_W : ACTION_W;
+      const h = n.type === 'designerNode' ? NODE_H : ACTION_H;
+      minX = Math.min(minX, n.position.x);
+      minY = Math.min(minY, n.position.y);
+      maxX = Math.max(maxX, n.position.x + w);
+      maxY = Math.max(maxY, n.position.y + h);
+    }
+    const contentW = Math.max(1, maxX - minX);
+    const contentH = Math.max(1, maxY - minY);
+    const vw = canvasEl.clientWidth;
+    const vh = canvasEl.clientHeight;
+    if (vw === 0 || vh === 0) return;
+    const padding = 0.1;
+    const zoom = Math.min(
+      (vw * (1 - padding * 2)) / contentW,
+      (vh * (1 - padding * 2)) / contentH,
+      1.5
+    );
+    const x = (vw - contentW * zoom) / 2 - minX * zoom;
+    const y = (vh - contentH * zoom) / 2 - minY * zoom;
+    fitTarget = { x, y, zoom };
+  }
+
+  async function handleLoadSelected(view: SavedViewSummary) {
+    loadingViews = true;
+    loadError = null;
+    try {
+      const res = await fetch(`/api/views/${view.id}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const full = (await res.json()) as {
+        id: string;
+        name: string;
+        layout_json: {
+          nodes: { pinch_id: string; position: { x: number; y: number } }[];
+          actions: { name: string; position: { x: number; y: number } }[];
+        };
+      };
+
+      const restored: Node[] = [];
+      for (const n of full.layout_json.nodes ?? []) {
+        const def = FAKE_NODES.find((x) => x.pinch_id === n.pinch_id);
+        if (!def) continue;
+        restored.push({
+          id: nextId('node', n.pinch_id),
+          type: 'designerNode',
+          position: n.position,
+          data: { node: def }
+        });
+      }
+      for (const a of full.layout_json.actions ?? []) {
+        const def = FAKE_ACTIONS.find((x) => x.name === a.name);
+        if (!def) continue;
+        restored.push({
+          id: nextId('action', a.name),
+          type: 'designerAction',
+          position: a.position,
+          data: { action: def }
+        });
+      }
+
+      nodes = restored;
+      savedView = { id: full.id, name: full.name };
+      showLoadModal = false;
+
+      // Defer fit until the new nodes have laid out and the canvas knows its size.
+      queueMicrotask(() => fitToNodes(restored));
+    } catch (e) {
+      loadError = e instanceof Error ? e.message : String(e);
+    } finally {
+      loadingViews = false;
+    }
   }
 
   // ---- Save view -------------------------------------------------------
@@ -334,6 +460,14 @@
     {/if}
     <button
       type="button"
+      onclick={openLoadModal}
+      class="inline-flex items-center gap-1 rounded-md border border-border bg-surface px-3 py-1 text-xs font-medium text-text shadow-sm transition hover:border-accent/60 hover:text-accent"
+    >
+      <FolderOpen size={12} />
+      Load Topology
+    </button>
+    <button
+      type="button"
       onclick={() => (showSaveModal = true)}
       disabled={nodes.length === 0}
       class="inline-flex items-center gap-1 rounded-md border border-accent/40 bg-accent/10 px-3 py-1 text-xs font-medium text-accent shadow-sm transition hover:border-accent hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-40"
@@ -342,6 +476,19 @@
       {savedView ? 'Update View' : 'Save View'}
     </button>
   </div>
+
+  {#if showLoadModal}
+    <LoadViewModal
+      views={availableViews}
+      loading={loadingViews}
+      error={loadError}
+      onload={handleLoadSelected}
+      oncancel={() => {
+        showLoadModal = false;
+        loadError = null;
+      }}
+    />
+  {/if}
 
   {#if showSaveModal}
     <SaveViewModal
@@ -414,6 +561,7 @@
 
   <!-- Canvas (drop target) -->
   <div
+    bind:this={canvasEl}
     class="relative flex-1"
     role="region"
     ondragover={onCanvasDragOver}
@@ -431,12 +579,13 @@
       bind:nodes
       {edges}
       {nodeTypes}
-      defaultViewport={{ x: 40, y: 40, zoom: 0.85 }}
+      initialViewport={{ x: 40, y: 40, zoom: 0.85 }}
       minZoom={0.25}
       maxZoom={2}
       ondelete={onDelete}
       proOptions={{ hideAttribution: true }}
     >
+      <FitToContent target={fitTarget} />
       <Background patternColor="rgb(var(--border))" gap={20} size={1} />
       <Controls showLock={false} />
     </SvelteFlow>

@@ -4,8 +4,8 @@
   import { actionEvents, now } from '$lib/stores/signals';
   import type { ActionConfig } from '$lib/types';
 
-  let props: NodeProps<{ action: ActionConfig }> = $props();
-  const action = $derived(props.data.action);
+  let props: NodeProps = $props();
+  const action = $derived((props.data as unknown as { action: ActionConfig }).action);
 
   // Pulsing if this action fired in the last 1.2s
   const lastFire = $derived(

@@ -5,8 +5,8 @@
   import { statusDot } from '$lib/util';
   import type { NodeSummary } from '$lib/types';
 
-  let props: NodeProps<{ node: NodeSummary }> = $props();
-  const node = $derived(props.data.node);
+  let props: NodeProps = $props();
+  const node = $derived((props.data as unknown as { node: NodeSummary }).node);
 
   const recentSignals = $derived(signalsForNode(node.pinch_id));
   const lastEvent = $derived($recentSignals[0]);

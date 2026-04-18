@@ -3,8 +3,9 @@
   import { layerHealth } from '$lib/stores/signals';
   import { statusDot } from '$lib/util';
 
-  let props: NodeProps<{ label: string; layer: string }> = $props();
-  const status = $derived($layerHealth[props.data.layer] ?? 'healthy');
+  let props: NodeProps = $props();
+  const data = $derived(props.data as unknown as { label: string; layer: string });
+  const status = $derived($layerHealth[data.layer] ?? 'healthy');
 </script>
 
 <div
@@ -15,6 +16,6 @@
 >
   <div class="flex items-center gap-2 text-[11px] uppercase tracking-[0.15em] text-muted">
     <span class="inline-block h-2 w-2 rounded-full {statusDot(status)}"></span>
-    {props.data.label} Layer
+    {data.label} Layer
   </div>
 </div>

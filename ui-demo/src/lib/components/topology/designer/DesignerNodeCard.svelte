@@ -1,17 +1,11 @@
 <script lang="ts">
   import { Handle, Position, type NodeProps } from '@xyflow/svelte';
   import { statusDot } from '$lib/util';
+  import type { DesignerNode } from './types';
 
-  export interface DesignerNode {
-    pinch_id: string;
-    name: string;
-    layer: string;
-    source_function: string;
-    last_severity: 'info' | 'notice' | 'warning' | 'anomaly' | 'critical';
-  }
-
-  let props: NodeProps<{ node: DesignerNode }> = $props();
-  const node = $derived(props.data.node);
+  let props: NodeProps = $props();
+  const nodeData = $derived(props.data as unknown as { node: DesignerNode });
+  const node = $derived(nodeData.node);
   const selected = $derived(props.selected);
   const critical = $derived(node.last_severity === 'critical');
 </script>

@@ -6,7 +6,7 @@
   import { nodeRegistry, signalsForNode, now } from '$lib/stores/signals';
   import { basename, relativeTime, statusLabel } from '$lib/util';
 
-  const pinchId = $derived($page.params.pinch_id);
+  const pinchId = $derived($page.params.pinch_id ?? '');
   const node = $derived($nodeRegistry.get(pinchId));
   const signals = $derived(signalsForNode(pinchId));
 

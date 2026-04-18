@@ -11,7 +11,7 @@
     nodesByLayer,
     now
   } from '$lib/stores/signals';
-  import { statusLabel } from '$lib/util';
+  import { statusLabel, type LayerStatus } from '$lib/util';
 
   let { data } = $props();
 
@@ -38,7 +38,7 @@
     {:else}
       <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
         {#each layers as [layer, layerNodes] (layer)}
-          {@const status = $layerHealth[layer] ?? 'healthy'}
+          {@const status = ($layerHealth[layer] ?? 'healthy') as LayerStatus}
           <button
             type="button"
             onclick={() => goto(`/monitor?layer=${encodeURIComponent(layer)}`)}

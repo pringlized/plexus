@@ -4,8 +4,8 @@
   import { actionEvents, now } from '$lib/stores/signals';
   import type { BatchConfig } from '$lib/types';
 
-  let props: NodeProps<{ batch: BatchConfig }> = $props();
-  const batch = $derived(props.data.batch);
+  let props: NodeProps = $props();
+  const batch = $derived((props.data as unknown as { batch: BatchConfig }).batch);
 
   const lastFire = $derived(
     $actionEvents.find((e) => e.action_result?.batch === batch.name)

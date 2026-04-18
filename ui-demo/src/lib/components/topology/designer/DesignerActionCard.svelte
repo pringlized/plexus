@@ -1,14 +1,11 @@
 <script lang="ts">
   import { Handle, Position, type NodeProps } from '@xyflow/svelte';
   import { Zap } from 'lucide-svelte';
+  import type { DesignerAction } from './types';
 
-  export interface DesignerAction {
-    name: string;
-    enabled: boolean;
-  }
-
-  let props: NodeProps<{ action: DesignerAction }> = $props();
-  const action = $derived(props.data.action);
+  let props: NodeProps = $props();
+  const actionData = $derived(props.data as unknown as { action: DesignerAction });
+  const action = $derived(actionData.action);
   const selected = $derived(props.selected);
 </script>
 

@@ -5,7 +5,8 @@
     Controls,
     MiniMap,
     type Node,
-    type Edge
+    type Edge,
+    type NodeTypes
   } from '@xyflow/svelte';
   import PlexusNodeCard from '$lib/components/topology/PlexusNodeCard.svelte';
   import ActionNodeCard from '$lib/components/topology/ActionNodeCard.svelte';
@@ -20,7 +21,7 @@
 
   let { data } = $props();
 
-  const nodeTypes = {
+  const nodeTypes: NodeTypes = {
     plexus: PlexusNodeCard,
     action: ActionNodeCard,
     layer: LayerGroup
@@ -196,7 +197,7 @@
       bind:nodes
       bind:edges
       {nodeTypes}
-      defaultViewport={{ x: 20, y: 20, zoom: 0.55 }}
+      initialViewport={{ x: 20, y: 20, zoom: 0.55 }}
       minZoom={0.25}
       maxZoom={1.5}
       proOptions={{ hideAttribution: true }}

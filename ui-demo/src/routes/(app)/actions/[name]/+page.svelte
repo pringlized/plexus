@@ -8,7 +8,7 @@
 
   let { data } = $props();
 
-  const name = $derived($page.params.name);
+  const name = $derived($page.params.name ?? '');
   const action = $derived(data.actions.find((a) => a.name === name));
   const myEvents = $derived(
     $actionEvents.filter((e) => e.action_result?.actions_fired.includes(name))
