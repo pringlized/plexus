@@ -14,7 +14,7 @@
   import DesignerActionCard from './DesignerActionCard.svelte';
   import type { DesignerNode, DesignerAction } from './types';
   import SaveViewModal from './SaveViewModal.svelte';
-  import LoadViewModal from './LoadViewModal.svelte';
+  import LoadViewModal from '../LoadViewModal.svelte';
   import FitToContent from '../FitToContent.svelte';
 
   interface SavedViewSummary {
@@ -185,7 +185,7 @@
             id: `${n.id}->${a.id}`,
             source: n.id,
             target: a.id,
-            type: 'smoothstep',
+            type: 'default',
             animated: false,
             style: 'stroke: #534AB7; stroke-width: 1; stroke-dasharray: 4 3;'
           });
@@ -337,6 +337,23 @@
   function buildLayout() {
     const nodeItems = nodes.filter((n) => n.type === 'designerNode');
     const actionItems = nodes.filter((n) => n.type === 'designerAction');
+
+    // Capture the wired connections explicitly so the saved view is
+    // self-contained — viewers don't need access to CONNECTION_MAP, and
+    // changes to the map later won't retroactively alter old layouts.
+    const placedActions = new Set(
+      actionItems.map((a) => (a.data as any).action.name as string)
+    );
+    const connections: { pinch_id: string; action: string }[] = [];
+    for (const n of nodeItems) {
+      const pinchId = (n.data as any).node.pinch_id as string;
+      for (const actionName of CONNECTION_MAP[pinchId] ?? []) {
+        if (placedActions.has(actionName)) {
+          connections.push({ pinch_id: pinchId, action: actionName });
+        }
+      }
+    }
+
     return {
       nodes: nodeItems.map((n) => ({
         pinch_id: (n.data as any).node.pinch_id as string,
@@ -345,7 +362,8 @@
       actions: actionItems.map((n) => ({
         name: (n.data as any).action.name as string,
         position: n.position
-      }))
+      })),
+      connections
     };
   }
 
