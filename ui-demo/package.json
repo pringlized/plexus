@@ -20,8 +20,10 @@
     "vite": "^5.3.0"
   },
   "dependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/js-yaml": "^4.0.9",
     "@xyflow/svelte": "^1.0.0",
+    "better-sqlite3": "^12.9.0",
     "js-yaml": "^4.1.1",
     "lucide-svelte": "^0.460.0"
   }

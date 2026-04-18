@@ -36,3 +36,9 @@ LOG_LEVEL: str = os.environ.get("PLEXUS_LOG_LEVEL", "INFO").upper()
 
 # Path to the YAML file that declares actions and batches.
 ACTION_CONFIG: str = os.environ.get("PLEXUS_ACTION_CONFIG", "plexus-actions.yaml")
+
+# SQLAlchemy URL for the Plexus persistence layer. Unset → memory-only
+# mode (no DB writes). Examples:
+#   sqlite:///plexus.db
+#   postgresql://user:pass@localhost/plexus
+DB_URL: str | None = os.environ.get("PLEXUS_DB_URL")

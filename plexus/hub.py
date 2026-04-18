@@ -31,6 +31,7 @@ class PlexusHub:
         self,
         action_config: str | None = None,
         ui_endpoint: str | None = None,
+        db_url: str | None = None,
     ):
         # Library owns its own log file. Wires a file handler on the
         # plexus.* logger the first time a hub is instantiated.
@@ -40,6 +41,21 @@ class PlexusHub:
         self.config = load_config(action_config or config.ACTION_CONFIG)
         # Precedence: explicit arg > env var > None (no POST)
         self.ui_endpoint = ui_endpoint or config.UI_ENDPOINT
+
+        # Persistence layer. Hub owns its own engine — host project just
+        # sets PLEXUS_DB_URL (or passes db_url explicitly). Unset → memory
+        # only (rev1 behavior preserved).
+        self._db = None
+        resolved_db_url = db_url or config.DB_URL
+        if resolved_db_url:
+            from sqlalchemy import create_engine
+
+            from plexus.db import PlexusDB
+
+            engine = create_engine(resolved_db_url)
+            self._db = PlexusDB(engine)
+            logger.info(f"[hub] persistence enabled ({resolved_db_url})")
+
         self._sequences: dict[str, int] = {}
         self._action_instances = self._init_actions()
 
@@ -101,6 +117,11 @@ class PlexusHub:
             f"src={_basename(source_file)}:{source_line} fn={source_function}"
         )
 
+        # Persist node row (logbook) — every signal upserts one row keyed
+        # by pinch_id. No-op when running without a db_engine.
+        if self._db:
+            self._db.upsert_node(signal)
+
         action_results: list[ActionResult] = []
         resolved_batch: str | None = None
 
@@ -115,6 +136,17 @@ class PlexusHub:
                 logger.warning(
                     f"[hub] unknown action or batch '{action}' "
                     f"(signal={signal.signal_id}) — skipping"
+                )
+
+        # Persist one row per action result to the audit log.
+        if self._db and action_results:
+            for r in action_results:
+                self._db.log_action(
+                    signal=signal,
+                    action_name=r.action_id,
+                    batch_name=resolved_batch,
+                    ok=r.ok,
+                    detail=r.detail,
                 )
 
         # Build the rolled-up wire result. Strict: any failure = batch failed.
