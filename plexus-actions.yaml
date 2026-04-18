@@ -5,6 +5,31 @@ actions:
   reboot-redis-server:
     enabled: true
 
+  notify-ops:
+    enabled: true
+
+  invoke-build-fixer:
+    enabled: true
+
+  quarantine-document:
+    enabled: true
+
+  scale-embed-workers:
+    enabled: true
+
 batches:
-  security-critical-response:
+  security-response:
     - dispatch-security-agent
+    - notify-ops
+
+  ingestion-alert:
+    - quarantine-document
+    - notify-ops
+
+  build-failure-response:
+    - invoke-build-fixer
+    - notify-ops
+
+  infra-critical:
+    - reboot-redis-server
+    - notify-ops
