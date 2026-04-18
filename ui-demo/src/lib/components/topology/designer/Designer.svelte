@@ -7,10 +7,11 @@
     type Node,
     type Edge
   } from '@xyflow/svelte';
-  import { ArrowLeft, Cpu, Zap } from 'lucide-svelte';
+  import { ArrowLeft, Check, Cpu, Save, Zap } from 'lucide-svelte';
   import { statusDot } from '$lib/util';
   import DesignerNodeCard, { type DesignerNode } from './DesignerNodeCard.svelte';
   import DesignerActionCard, { type DesignerAction } from './DesignerActionCard.svelte';
+  import SaveViewModal from './SaveViewModal.svelte';
 
   // ---- Fake data (will be live in a future revision) -------------------
 
@@ -200,6 +201,73 @@
     if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
   }
 
+  // ---- Save view -------------------------------------------------------
+
+  let savedView: { id: string; name: string } | null = $state(null);
+  let showSaveModal = $state(false);
+  let saving = $state(false);
+  let saveError: string | null = $state(null);
+
+  function buildLayout() {
+    const nodeItems = nodes.filter((n) => n.type === 'designerNode');
+    const actionItems = nodes.filter((n) => n.type === 'designerAction');
+    return {
+      nodes: nodeItems.map((n) => ({
+        pinch_id: (n.data as any).node.pinch_id as string,
+        position: n.position
+      })),
+      actions: actionItems.map((n) => ({
+        name: (n.data as any).action.name as string,
+        position: n.position
+      }))
+    };
+  }
+
+  async function handleSave({
+    name,
+    description
+  }: {
+    name: string;
+    description: string;
+  }) {
+    saving = true;
+    saveError = null;
+    try {
+      const layout = buildLayout();
+      let res: Response;
+      if (savedView) {
+        res = await fetch(`/api/views/${savedView.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, description, layout_json: layout })
+        });
+      } else {
+        res = await fetch('/api/views', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, description, layout_json: layout })
+        });
+      }
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error ?? `HTTP ${res.status}`);
+      }
+      if (savedView) {
+        savedView = { id: savedView.id, name };
+      } else {
+        const body = await res.json();
+        savedView = { id: body.id, name: body.name };
+      }
+      showSaveModal = false;
+    } catch (e) {
+      saveError = e instanceof Error ? e.message : String(e);
+    } finally {
+      saving = false;
+    }
+  }
+
+  // ---- Drag and drop ---------------------------------------------------
+
   function onCanvasDrop(e: DragEvent) {
     e.preventDefault();
     const raw = e.dataTransfer?.getData('application/plexus-designer');
@@ -252,6 +320,41 @@
     <ArrowLeft size={12} />
     Back
   </a>
+
+  <!-- Save button + saved indicator (top-right overlay) -->
+  <div class="absolute right-3 top-3 z-30 flex items-center gap-2">
+    {#if savedView}
+      <span
+        class="inline-flex items-center gap-1 rounded-md border border-sev-healthy/40 bg-sev-healthy/10 px-2 py-1 text-xs text-sev-healthy shadow-sm"
+        title={`Saved as ${savedView.name}`}
+      >
+        <Check size={12} />
+        {savedView.name}
+      </span>
+    {/if}
+    <button
+      type="button"
+      onclick={() => (showSaveModal = true)}
+      disabled={nodes.length === 0}
+      class="inline-flex items-center gap-1 rounded-md border border-accent/40 bg-accent/10 px-3 py-1 text-xs font-medium text-accent shadow-sm transition hover:border-accent hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-40"
+    >
+      <Save size={12} />
+      {savedView ? 'Update View' : 'Save View'}
+    </button>
+  </div>
+
+  {#if showSaveModal}
+    <SaveViewModal
+      initialName={savedView?.name ?? ''}
+      {saving}
+      error={saveError}
+      onsave={handleSave}
+      oncancel={() => {
+        showSaveModal = false;
+        saveError = null;
+      }}
+    />
+  {/if}
 
   <!-- Palette (left, fixed width, scrollable) -->
   <aside class="z-20 flex h-full w-56 shrink-0 flex-col border-r border-border bg-surface pt-12">
