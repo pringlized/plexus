@@ -176,6 +176,12 @@
         as actions fire — batches fan out into one edge per action.
       </p>
     </div>
+    <a
+      href="/topology/custom/new"
+      class="inline-flex items-center gap-1.5 rounded-md border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-medium text-accent transition hover:border-accent hover:bg-accent/20"
+    >
+      + Custom Topology
+    </a>
   </header>
 
   <div bind:this={canvasEl} class="relative min-h-0 flex-1">
